@@ -194,6 +194,7 @@ def build(mobile, web=False):
     global gekappt
     data=[]
     for e in entries:
+        if web and e.get("aus"): continue   # Ausgeblendetes gehört nicht in die Team-Fassung
         d=dict(e); d.pop("ts",None)
         if web:
             # Team-Seite: auf die verkleinerten Web-Fassungen zeigen, nicht auf lokale Pfade.
@@ -215,6 +216,7 @@ def build(mobile, web=False):
     out=out.replace("__N__",str(sum(1 for e in entries if not e.get("aus"))))
     out=out.replace("__DATE__",datetime.date.today().strftime("%d.%m.%Y"))
     out=out.replace("__MOBILE__","true" if mobile else "false")
+    out=out.replace("__NURLESEN__","true" if web else "false")
     name="index.html" if web else ("CALIANTE_BOARD_HANDY.html" if mobile else "CALIANTE_VIDEO_BOARD.html")
     open(os.path.join(BASE,name),"w",encoding='utf-8').write(out)
     ICLOUD="/sessions/tender-dazzling-sagan/mnt/com~apple~CloudDocs/CALIANTE"
