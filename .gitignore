@@ -1,0 +1,12 @@
+# Videos und Bilder bleiben lokal — zu groß für GitHub (1,2 GB, wächst weiter).
+INSPO_INBOX/
+
+# Erzeugte und flüchtige Sachen
+_Themen/
+_papierkorb/
+.board_server.log
+.DS_Store
+*.zip
+
+# Die Mac-Fassung zeigt auf lokale Videopfade und funktioniert nur auf diesem Rechner.
+CALIANTE_VIDEO_BOARD.html

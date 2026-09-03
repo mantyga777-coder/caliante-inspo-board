@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>CALIANTÉ · Inspo-Board</title>
+<style>
+:root{color-scheme:light;--noir:#16120F;--esp:#4A342A;--mocha:#8B6F5E;--taupe:#B7A192;--creme:#EFE8DE;--butter:#F2E4C4;--paper:#FAF7F2;}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-text-size-adjust:100%;}
+body{font-family:-apple-system,'Helvetica Neue',sans-serif;background:var(--paper);color:var(--noir);padding:14px;padding-bottom:60px;}
+h1{font-family:'Didot','Bodoni 72',Georgia,serif;font-size:26px;letter-spacing:.4px;}
+.sub{color:var(--mocha);font-size:12.5px;margin:3px 0 12px;}
+.help{background:var(--creme);border-radius:11px;padding:11px 13px;font-size:12.5px;line-height:1.55;margin-bottom:12px;}
+.help b{color:var(--esp);}
+.bar{display:flex;gap:6px;align-items:center;overflow-x:auto;padding:8px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.bar::-webkit-scrollbar{display:none}
+.sticky{position:sticky;top:0;background:var(--paper);z-index:9;}
+.chip{border:1px solid var(--taupe);background:#fff;border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;flex:none;}
+.chip.on{background:var(--esp);color:#fff;border-color:var(--esp);}
+.chip.hot{background:var(--butter);border-color:var(--esp);color:var(--noir);}
+.mini{border:none;background:transparent;color:inherit;font-size:11px;cursor:pointer;padding:0 1px;opacity:.7;font-family:inherit;}
+.mini:hover{opacity:1;}
+input[type=search]{flex:1;min-width:130px;border:1px solid var(--taupe);border-radius:999px;padding:8px 13px;font-size:16px;background:#fff;}
+.btn{border:none;background:var(--noir);color:var(--creme);border-radius:999px;padding:8px 14px;font-size:12px;cursor:pointer;white-space:nowrap;flex:none;}
+.btn.ghost{background:#fff;color:var(--noir);border:1px solid var(--taupe);}
+.count{font-size:12px;color:var(--mocha);margin:8px 2px 10px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(215px,1fr));gap:12px;}
+@media(max-width:560px){.grid{grid-template-columns:repeat(2,1fr);gap:9px;}body{padding:11px;}h1{font-size:21px;}}
+.card{background:#fff;border:1px solid #e7ded4;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;}
+.card.aus{opacity:.5;}
+.card video,.card .ph{width:100%;aspect-ratio:9/16;object-fit:cover;background:var(--noir);display:block;}
+.ph{position:relative;cursor:pointer;}
+.ph .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;}
+.ph .play span{width:44px;height:44px;border-radius:50%;background:rgba(22,18,15,.55);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;padding-left:3px;}
+.slot{position:relative;background:var(--noir);}
+.slot img{width:100%;aspect-ratio:9/16;object-fit:cover;display:block;user-select:none;-webkit-user-drag:none;}
+.nav{position:absolute;top:50%;transform:translateY(-50%);border:none;width:30px;height:44px;background:rgba(22,18,15,.42);color:#fff;font-size:19px;cursor:pointer;font-family:inherit;line-height:1;}
+.nav:disabled{opacity:.2;cursor:default;}
+.nav.zur{left:0;border-radius:0 7px 7px 0;} .nav.vor{right:0;border-radius:7px 0 0 7px;}
+.zaehler{position:absolute;bottom:7px;left:50%;transform:translateX(-50%);background:rgba(22,18,15,.55);color:#fff;font-size:10px;padding:2px 8px;border-radius:999px;}
+.linkbox{aspect-ratio:9/16;background:linear-gradient(150deg,var(--esp),var(--noir));color:var(--creme);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:13px;text-decoration:none;}
+.linkbox .pl{font-size:10px;letter-spacing:2px;opacity:.75;}
+.linkbox .op{border:1px solid var(--taupe);border-radius:999px;padding:5px 12px;font-size:11.5px;}
+.meta{padding:8px 9px 10px;display:flex;flex-direction:column;gap:6px;}
+.name{font-size:11px;font-weight:600;word-break:break-word;line-height:1.35;}
+.tags{display:flex;gap:4px;flex-wrap:wrap;}
+.tag{font-size:9.5px;padding:2px 7px;border-radius:999px;background:var(--creme);color:var(--esp);}
+.tag.new{background:var(--butter);font-weight:700;}
+textarea{width:100%;min-height:50px;border:1px solid #e7ded4;border-radius:7px;padding:6px;font-size:16px;font-family:inherit;resize:vertical;background:var(--paper);}
+@media(min-width:561px){textarea{font-size:12.5px}}
+select{width:100%;border:1px solid #e7ded4;border-radius:6px;padding:5px 6px;font-size:11.5px;background:#fff;}
+.cats{border:1px solid #e7ded4;border-radius:6px;background:#fff;font-size:11.5px;}
+.cats summary{padding:5px 6px;cursor:pointer;list-style:none;color:var(--esp);}
+.cats summary::-webkit-details-marker{display:none;}
+.cats summary::before{content:'▸ ';}
+.cats[open] summary::before{content:'▾ ';}
+.catlist{max-height:130px;overflow-y:auto;padding:2px 8px 6px;border-top:1px solid #e7ded4;}
+.catlist label{display:block;padding:3px 0;font-size:11.5px;}
+.catlist input{margin-right:6px;}
+.saved{font-size:9.5px;color:var(--mocha);height:11px;}
+.mob{background:var(--butter);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5;margin-bottom:10px;display:none;}
+.up{display:none;border:1.5px dashed var(--taupe);border-radius:11px;background:#fff;padding:15px;margin-bottom:10px;text-align:center;font-size:12px;color:var(--mocha);cursor:pointer;}
+.up b{display:block;font-size:13px;color:var(--esp);margin-bottom:3px;}
+.up.hot{background:var(--butter);border-color:var(--esp);border-style:solid;}
+.del{border:1px solid #e7ded4;background:#fff;color:var(--mocha);border-radius:7px;padding:5px;font-size:11px;cursor:pointer;font-family:inherit;}
+.del:hover{background:var(--creme);color:var(--esp);}
+</style></head><body>
+<h1>CALIANTÉ · Inspo-Board</h1>
+<div class="sub">__N__ Einträge · aktualisiert __DATE__</div>
+<div class="mob" id="mobnote">📱 <b>Handy-Version:</b> Vorschaubilder + Notizen. Videos abspielen, Themen ändern und Hochladen gehen in der Mac-Version.</div>
+<div class="help">📲 Link/Video per Telegram an Alfred → landet in <b>INSPO_INBOX</b>. Danach in Cowork sagen: <b>„neue Inspo einsortieren"</b>.<br>💾 Notizen speichern automatisch. Über <b>Notizen exportieren</b> bekommt Claude sie.</div>
+<div class="up" id="up"><b>Videos oder Bilder hierher ziehen</b>oder klicken zum Auswählen</div>
+<input type="file" id="fi" accept="video/*,image/*" multiple hidden>
+<div class="sticky">
+<div class="bar" id="catbar"></div>
+<div class="bar" id="typebar"><span class="chip tf on" data-t="alle">Alle Typen</span><span class="chip tf" data-t="video">🎬 Videos</span><span class="chip tf" data-t="bilder">🖼 Bilder</span><span class="chip tf" data-t="link">🔗 Links</span></div>
+</div>
+<div class="bar"><input type="search" id="q" placeholder="Suchen …"><span class="chip of on" data-o="alle">Alle Quellen</span>__ORIGCHIPS__<button class="btn" onclick="ex()">Notizen exportieren</button><button class="btn ghost" onclick="tg(this)">Nur mit Notiz</button><button class="btn ghost" id="ausbtn">Ausgeblendete zeigen</button></div>
+<div class="count" id="count"></div>
+<div class="grid" id="grid"></div>
+<script>
+const DATA=__DATA__, CATS=__CATS__, MOBILE=__MOBILE__;
+const LIVE=location.protocol.startsWith('http'); // Themen ändern und Hochladen nur über BOARD_STARTEN.command
+if(MOBILE)document.getElementById('mobnote').style.display='block';
+let cf='alle',of='alle',tf='alle',q='',noted=false,zeigeAus=false,bearbeiten=false;
+const nk=i=>'cn_'+i,sk=i=>'cs_'+i,ck=i=>'cc_'+i;
+const offeneThemen=new Set();   // welche Themen-Auswahllisten gerade aufgeklappt sind, bleibt über render() hinweg erhalten
+
+// Spiegelbild von BOARD_DATEN.json — hier ist die Wahrheit, solange die Seite offen ist.
+const EINTRAEGE={};
+DATA.forEach(v=>{const o={kategorien:v.cats};
+  if(v.notiz)o.notiz=v.notiz; if(v.status)o.status=v.status; if(v.aus)o.ausgeblendet=true;
+  EINTRAEGE[v.id]=o;});
+
+const feldKey={notiz:nk,status:sk};
+function hole(v,feld){
+  if(!LIVE){const l=localStorage.getItem(feldKey[feld](v.id));if(l)return l;}  // ohne Server: Browser-Eintrag
+  const e=EINTRAEGE[v.id]||{};
+  return e[feld]||'';
+}
+function setze(v,feld,wert){
+  if(!LIVE){localStorage.setItem(feldKey[feld](v.id),wert);return;}
+  const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={kategorien:v.cats});
+  if(wert)e[feld]=wert; else delete e[feld];
+  sichern();
+}
+function holeKategorien(v){
+  if(!LIVE){
+    const l=localStorage.getItem(ck(v.id));
+    if(l){try{const p=JSON.parse(l);return Array.isArray(p)?p:[p];}catch(e){return [l];}}  // altes Format: einzelner String
+  }
+  const e=EINTRAEGE[v.id]||{};
+  return Array.isArray(e.kategorien)?e.kategorien:v.cats;
+}
+function setzeKategorien(v,liste){
+  if(!LIVE){localStorage.setItem(ck(v.id),JSON.stringify(liste));return;}
+  const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={});
+  e.kategorien=liste;
+  sichern();
+}
+
+let sicherTimer=null;
+function sichern(sofort){
+  if(!LIVE)return Promise.resolve({ok:true});
+  clearTimeout(sicherTimer);
+  return new Promise(fertig=>{sicherTimer=setTimeout(async()=>{
+    try{
+      const j=await(await fetch('/daten',{method:'POST',
+        body:JSON.stringify({kategorien:CATS,eintraege:EINTRAEGE})})).json();
+      if(!j.ok)alert('Konnte nicht speichern: '+j.fehler);
+      fertig(j);
+    }catch(e){alert('Server nicht erreichbar — läuft BOARD_STARTEN.command noch?');fertig({ok:false});}
+  },sofort?0:600);});
+}
+
+function render(){
+  const g=document.getElementById('grid');g.innerHTML='';let n=0;
+  DATA.forEach(v=>{
+    const note=hole(v,'notiz'),st=hole(v,'status'),kats=holeKategorien(v);
+    const ausgeblendet=!!(EINTRAEGE[v.id]||{}).ausgeblendet;
+    if(ausgeblendet!==zeigeAus)return;
+    if(cf!=='alle'&&!kats.includes(cf))return; if(of!=='alle'&&v.origin!==of)return; if(tf!=='alle'&&v.type!==tf)return;
+    if(q&&!((v.name+' '+v.folder+' '+v.id).toLowerCase().includes(q)))return;
+    if(noted&&!note)return; n++;
+    const c=document.createElement('div');c.className='card'+(ausgeblendet?' aus':'');
+    let media;
+    if(v.type==='link'){
+      media=`<a class="linkbox" href="${v.src}" target="_blank" rel="noopener"><div class="pl">${v.folder.toUpperCase()}</div><div style="font-size:12px;line-height:1.4">${v.name}</div><div class="op">Öffnen ↗</div></a>`;
+    } else if(v.type==='bilder'){
+      media=`<div class="slot"><img src="${bildQuelle(v,0)}" alt="">
+        <button class="nav zur" disabled>‹</button><button class="nav vor" ${v.bilder.length<2?'disabled':''}>›</button>
+        <span class="zaehler">1 / ${v.bilder.length}</span></div>`;
+    } else if(MOBILE || !v.src){
+      media=v.thumb?`<div class="ph"><img class="ph" src="${v.thumb}" alt=""><div class="play"><span>▶</span></div></div>`:`<div class="ph"><div class="play"><span>▶</span></div></div>`;
+    } else {
+      media=`<video controls preload="none" playsinline ${v.thumb?`poster="${v.thumb}"`:''} src="${v.src}"></video>`;
+    }
+    c.innerHTML=media+`<div class="meta">
+      <div class="name">${v.type==='link'?(v.date||''):v.name}</div>
+      <div class="tags"><span class="tag ${v.origin==='Inbox (neu)'?'new':''}">${v.origin}</span><span class="tag">${v.folder}</span>${v.mb?`<span class="tag">${v.mb} MB</span>`:''}</div>
+      <details class="cats"><summary>Themen (${kats.length})</summary>
+        <div class="catlist">${CATS.map(x=>`<label><input type="checkbox" value="${x}" ${kats.includes(x)?'checked':''}> ${x}</label>`).join('')}</div>
+      </details>
+      <select class="st"><option value="">— Status —</option>${['Vorlage','Eingeplant','Abgedreht','Gepostet','Verwerfen'].map(s=>`<option ${st===s?'selected':''}>${s}</option>`).join('')}</select>
+      <textarea placeholder="Warum gespeichert? Was übernehmen?">${note.replace(/</g,'&lt;')}</textarea><div class="saved"></div>
+      ${LIVE&&(v.type==='video'||v.type==='bilder')?(ausgeblendet?'<button class="del">↩︎ Zurückholen</button>':'<button class="del">🗑 Aus dem Board nehmen</button>'):''}</div>`;
+    if(v.type==='bilder')swipeAn(c,v);
+    const ta=c.querySelector('textarea'),sv=c.querySelector('.saved');
+    ta.addEventListener('input',()=>{setze(v,'notiz',ta.value);sv.textContent='✓';setTimeout(()=>sv.textContent='',1000);});
+    const catsEl=c.querySelector('.cats');
+    if(offeneThemen.has(v.id))catsEl.open=true;
+    catsEl.addEventListener('toggle',()=>{if(catsEl.open)offeneThemen.add(v.id);else offeneThemen.delete(v.id);});
+    catsEl.querySelectorAll('input[type=checkbox]').forEach(cb=>cb.addEventListener('change',()=>{
+      const gewaehlt=[...catsEl.querySelectorAll('input:checked')].map(x=>x.value);
+      if(!gewaehlt.length){cb.checked=true;return;}   // mindestens ein Thema muss bleiben
+      if(catsEl.open)offeneThemen.add(v.id);          // Klappzustand direkt hier sichern — das
+      else offeneThemen.delete(v.id);                 // "toggle"-Ereignis feuert sonst zu spät
+      setzeKategorien(v,gewaehlt);render();
+    }));
+    c.querySelector('.st').addEventListener('change',e=>setze(v,'status',e.target.value));
+    const db=c.querySelector('.del');
+    if(db)db.onclick=()=>ausgeblendet?zurueckholen(v,db):entfernen(v,db);
+    g.appendChild(c);
+  });
+  document.getElementById('count').textContent=n+(zeigeAus?' ausgeblendete Einträge':' Einträge');
+}
+
+/* ---- Bilder-Slot: durchblättern per Pfeil oder Wischen ---- */
+function bildQuelle(v,i){
+  const b=v.bilder[i]||{};
+  return (MOBILE||!b.src)?(b.thumb||''):b.src;
+}
+function swipeAn(karte,v){
+  let i=0;
+  const slot=karte.querySelector('.slot'),img=slot.querySelector('img'),
+        zur=slot.querySelector('.nav.zur'),vor=slot.querySelector('.nav.vor'),
+        z=slot.querySelector('.zaehler');
+  function zeige(neu){
+    i=Math.max(0,Math.min(v.bilder.length-1,neu));
+    img.src=bildQuelle(v,i);
+    z.textContent=(i+1)+' / '+v.bilder.length;
+    zur.disabled=i===0; vor.disabled=i===v.bilder.length-1;
+  }
+  zur.onclick=()=>zeige(i-1); vor.onclick=()=>zeige(i+1);
+  let x0=null;
+  slot.addEventListener('touchstart',e=>x0=e.touches[0].clientX,{passive:true});
+  slot.addEventListener('touchend',e=>{
+    if(x0===null)return;
+    const dx=e.changedTouches[0].clientX-x0; x0=null;
+    if(Math.abs(dx)>35)zeige(i+(dx<0?1:-1));
+  },{passive:true});
+}
+
+async function entfernen(v,knopf){
+  const eigen=v.id.startsWith('INSPO_INBOX/');
+  const text=eigen
+    ? v.name+'\n\nAus dem Board nehmen?\nDie Datei wandert in den Ordner _papierkorb.'
+    : v.name+'\n\nAus dem Board nehmen?\nDie Datei bleibt unangetastet in ihrem Ordner liegen.';
+  if(!confirm(text))return;
+  knopf.disabled=true;knopf.textContent='einen Moment …';
+  await sichern(true);                       // offene Notizen erst sichern, sonst überschreibt der Neubau sie
+  const j=await(await fetch('/entfernen?id='+encodeURIComponent(v.id),{method:'POST'})).json();
+  if(j.ok)location.reload(); else{alert('Ging nicht: '+j.fehler);knopf.disabled=false;}
+}
+async function zurueckholen(v,knopf){
+  knopf.disabled=true;knopf.textContent='einen Moment …';
+  const j=await(await fetch('/zurueckholen?id='+encodeURIComponent(v.id),{method:'POST'})).json();
+  if(j.ok)location.reload(); else{alert('Ging nicht: '+j.fehler);knopf.disabled=false;}
+}
+
+/* ---- Themenleiste: filtern, umbenennen, löschen, neu anlegen ---- */
+function bauChips(){
+  const b=document.getElementById('catbar');b.innerHTML='';
+  if(LIVE){   // ganz vorn, sonst rutscht der Knopf bei vielen Themen aus dem Bild
+    const t=document.createElement('button');t.className='btn ghost';
+    t.textContent=bearbeiten?'✓ Fertig':'Themen bearbeiten';
+    t.onclick=()=>{bearbeiten=!bearbeiten;bauChips();};
+    b.appendChild(t);
+    if(bearbeiten){
+      const n=document.createElement('button');n.className='btn';n.textContent='+ Neues Thema';n.onclick=themaNeu;
+      b.appendChild(n);
+    }
+  }
+  ['alle'].concat(CATS).forEach(c=>{
+    const s=document.createElement('span');
+    s.className='chip cf'+(cf===c?' on':'');
+    s.textContent=c==='alle'?'Alle':c;
+    s.onclick=()=>{cf=c;bauChips();ablageText();render();};
+    if(c!=='alle'&&LIVE){
+      if(bearbeiten){
+        const u=document.createElement('button');u.className='mini';u.textContent='✎';u.title='Umbenennen';
+        u.onclick=e=>{e.stopPropagation();umbenennen(c);};
+        const w=document.createElement('button');w.className='mini';w.textContent='✕';w.title='Thema löschen';
+        w.onclick=e=>{e.stopPropagation();themaLoeschen(c);};
+        s.append(' ',u,w);
+      }
+      ablegeZiel(s,c);   // Videos direkt auf ein Thema ziehen
+    }
+    b.appendChild(s);
+  });
+}
+async function themaNeu(){
+  const n=(prompt('Wie soll das neue Thema heißen?')||'').trim();
+  if(!n)return;
+  if(CATS.includes(n))return alert('Dieses Thema gibt es schon.');
+  CATS.push(n);
+  const j=await sichern(true); if(!j.ok)return;
+  bauChips();render();
+}
+async function umbenennen(alt){
+  const neu=(prompt('Neuer Name für „'+alt+'"',alt)||'').trim();
+  if(!neu||neu===alt)return;
+  if(CATS.includes(neu))return alert('Dieses Thema gibt es schon.');
+  CATS[CATS.indexOf(alt)]=neu;
+  // Jeder Eintrag bekommt seine Themen ausgeschrieben, damit die Umbenennung niemanden verliert.
+  DATA.forEach(v=>{const kats=holeKategorien(v);
+    if(kats.includes(alt)){const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={});e.kategorien=kats.map(k=>k===alt?neu:k);}});
+  if(cf===alt)cf=neu;
+  const j=await sichern(true); if(!j.ok)return;
+  bauChips();render();
+}
+async function themaLoeschen(name){
+  if(CATS.length<2)return alert('Mindestens ein Thema muss übrig bleiben.');
+  const auffang=(CATS.includes('Sonstiges')&&name!=='Sonstiges')?'Sonstiges':CATS.find(c=>c!==name);
+  const betroffen=DATA.filter(v=>holeKategorien(v).includes(name)).length;
+  if(!confirm('Thema „'+name+'" löschen?\n\n'+betroffen+' Einträge wandern nach „'+auffang+'".\nEs wird keine Datei gelöscht.'))return;
+  CATS.splice(CATS.indexOf(name),1);
+  DATA.forEach(v=>{const kats=holeKategorien(v);
+    if(kats.includes(name)){
+      const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={});
+      e.kategorien=[...new Set(kats.map(k=>k===name?auffang:k))];
+    }});
+  if(cf===name)cf='alle';
+  const j=await sichern(true); if(!j.ok)return;
+  bauChips();render();
+}
+
+/* ---- Videos hochladen: aufs Ablagefeld oder direkt auf ein Thema ---- */
+function ablegeZiel(el,kat){
+  ['dragover','dragenter'].forEach(n=>el.addEventListener(n,e=>{e.preventDefault();el.classList.add('hot');}));
+  ['dragleave','drop'].forEach(n=>el.addEventListener(n,()=>el.classList.remove('hot')));
+  el.addEventListener('drop',e=>{e.preventDefault();
+    senden([...e.dataTransfer.files],typeof kat==='function'?kat():kat);});
+}
+let laeuft=false;
+async function senden(dateien,kat){
+  if(laeuft)return alert('Es lädt gerade schon etwas hoch — kurz warten.');
+  const videos=dateien.filter(f=>/\.(mp4|mov|webm|m4v)$/i.test(f.name));
+  const bilder=dateien.filter(f=>/\.(jpe?g|png|heic|webp)$/i.test(f.name));
+  if(!videos.length&&!bilder.length)
+    return alert('Bitte Videos (mp4, mov, webm, m4v) oder Bilder (jpg, png, heic, webp).');
+  let slot='';
+  if(bilder.length){
+    const vorschlag=bilder[0].name.replace(/\.[^.]+$/,'');
+    slot=bilder.length>1
+      ? (prompt(bilder.length+' Bilder werden eine Karte zum Durchswipen.\nWie soll sie heißen?',vorschlag)||'').trim()
+      : vorschlag;
+    if(!slot)return;
+  }
+  const up=document.getElementById('up'),alt=up.innerHTML;laeuft=true;
+  await sichern(true);
+  const alle=videos.concat(bilder);
+  for(let i=0;i<alle.length;i++){
+    const istBild=bilder.includes(alle[i]);
+    up.innerHTML='<b>Lädt hoch … '+(i+1)+' von '+alle.length+'</b>'+alle[i].name+(kat?' → '+kat:'');
+    try{
+      const j=await(await fetch('/upload?name='+encodeURIComponent(alle[i].name)
+        +'&kat='+encodeURIComponent(kat||'')+'&slot='+encodeURIComponent(istBild?slot:''),
+        {method:'POST',body:alle[i]})).json();
+      if(!j.ok){alert('Ging nicht: '+j.fehler);up.innerHTML=alt;laeuft=false;return;}
+    }catch(e){alert('Server nicht erreichbar — läuft BOARD_STARTEN.command noch?');up.innerHTML=alt;laeuft=false;return;}
+  }
+  up.innerHTML='<b>Fertig — Board wird neu geladen …</b>';
+  location.reload();
+}
+function ablageText(){
+  const up=document.getElementById('up');
+  up.innerHTML=cf==='alle'
+    ? '<b>Videos oder Bilder hierher ziehen</b>mehrere Bilder zusammen werden eine Karte zum Durchswipen'
+    : '<b>Videos oder Bilder hierher ziehen</b>landen direkt im Thema „'+cf+'"';
+}
+
+document.querySelectorAll('.of').forEach(c=>c.onclick=()=>{document.querySelectorAll('.of').forEach(x=>x.classList.remove('on'));c.classList.add('on');of=c.dataset.o;render();});
+document.querySelectorAll('.tf').forEach(c=>c.onclick=()=>{document.querySelectorAll('.tf').forEach(x=>x.classList.remove('on'));c.classList.add('on');tf=c.dataset.t;render();});
+document.getElementById('q').oninput=e=>{q=e.target.value.toLowerCase();render();};
+function tg(b){noted=!noted;b.classList.toggle('ghost');render();}
+document.getElementById('ausbtn').onclick=function(){zeigeAus=!zeigeAus;this.textContent=zeigeAus?'Zurück zum Board':'Ausgeblendete zeigen';this.classList.toggle('ghost');render();};
+function ex(){const o={exportiert:new Date().toISOString(),eintraege:[]};
+DATA.forEach(v=>{const n=hole(v,'notiz'),s=hole(v,'status'),c=holeKategorien(v);
+if(n||s||c.length)o.eintraege.push({datei:v.id,kategorien:c,status:s,notiz:n});});
+const b=new Blob([JSON.stringify(o,null,2)],{type:'application/json'});
+const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='caliante_notizen.json';a.click();
+alert('caliante_notizen.json gespeichert.');}
+
+if(LIVE){
+  const up=document.getElementById('up'),fi=document.getElementById('fi');
+  up.style.display='block';
+  up.onclick=()=>fi.click();
+  fi.onchange=()=>{const f=[...fi.files];fi.value='';senden(f,cf==='alle'?'':cf);};
+  ablegeZiel(up,()=>cf==='alle'?'':cf);                       // Ziel erst beim Ablegen bestimmen
+  window.addEventListener('dragover',e=>e.preventDefault());  // sonst öffnet der Browser das Video
+  window.addEventListener('drop',e=>e.preventDefault());
+  // Einmalig: was früher nur im Browser lag, in die Datei übernehmen.
+  if(!localStorage.getItem('cl_uebernommen')){
+    let n=0;
+    DATA.forEach(v=>{
+      const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={kategorien:v.cats});
+      const no=localStorage.getItem(nk(v.id)),st=localStorage.getItem(sk(v.id)),kaRaw=localStorage.getItem(ck(v.id));
+      if(no&&!e.notiz){e.notiz=no;n++;}
+      if(st&&!e.status){e.status=st;n++;}
+      if(kaRaw){
+        let ka; try{ka=JSON.parse(kaRaw);}catch(_){ka=kaRaw;}
+        if(!Array.isArray(ka))ka=[ka];
+        ka=ka.filter(k=>CATS.includes(k));
+        if(ka.length&&JSON.stringify(ka)!==JSON.stringify(e.kategorien||[])){e.kategorien=ka;n++;}
+      }
+    });
+    localStorage.setItem('cl_uebernommen','1');
+    if(n)sichern(true).then(()=>{render();alert(n+' Angaben aus dem Browser in die Datei übernommen.');});
+  }
+}
+bauChips();ablageText();render();
+</script></body></html>
