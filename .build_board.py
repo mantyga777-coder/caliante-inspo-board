@@ -222,6 +222,7 @@ def build(mobile, web=False):
     out=out.replace("__DATE__",datetime.date.today().strftime("%d.%m.%Y"))
     out=out.replace("__MOBILE__","true" if mobile else "false")
     out=out.replace("__NURLESEN__","true" if web else "false")
+    out=out.replace("__REPO__","mantyga777-coder/caliante-inspo-board")
     # Baukennung: GitHub lässt Browser die Seite 10 Minuten zwischenspeichern. Die Team-Fassung
     # vergleicht diese Kennung mit version.txt und lädt sich bei Bedarf selbst neu.
     bau_kennung = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")

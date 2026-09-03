@@ -97,6 +97,47 @@ if(NURLESEN){
 // NURLESEN ist die veröffentlichte Team-Fassung: dahinter steht kein Server, also keine
 // Bearbeiten-Knöpfe. Sonst: Bearbeiten nur lokal über BOARD_STARTEN.command.
 const LIVE=!NURLESEN && location.protocol.startsWith('http');
+
+/* ---- Online-Bearbeiten (nur veröffentlichte Fassung, nur mit Zugangsschlüssel) ---- */
+const REPO="__REPO__";
+const tokenSchluessel='cl_gh_token';
+function token(){ try{return localStorage.getItem(tokenSchluessel)||'';}catch(e){return '';} }
+// Bearbeiten ist möglich: lokal immer, online nur mit hinterlegtem Schlüssel.
+const BEARBEITBAR = LIVE || (NURLESEN && !!token());
+let offeneAenderungen=false;
+
+async function ghSpeichern(){
+  const t=token();
+  if(!t) return {ok:false,fehler:'Kein Zugangsschlüssel hinterlegt.'};
+  const url=`https://api.github.com/repos/${REPO}/contents/BOARD_DATEN.json`;
+  const kopf={'Authorization':'Bearer '+t,'Accept':'application/vnd.github+json'};
+  try{
+    // Aktuellen Stand holen — sonst überschreiben wir, was jemand anderes geändert hat.
+    const jetzt=await fetch(url+'?t='+Date.now(),{headers:kopf,cache:'no-store'});
+    if(jetzt.status===401||jetzt.status===403)
+      return {ok:false,fehler:'Zugangsschlüssel ungültig oder ohne Schreibrecht.'};
+    if(!jetzt.ok) return {ok:false,fehler:'GitHub antwortet nicht ('+jetzt.status+').'};
+    const datei=await jetzt.json();
+    const bestand=JSON.parse(decodeURIComponent(escape(atob(datei.content.replace(/\n/g,'')))));
+
+    // Nur die Einträge überschreiben, die hier geändert wurden — Rest unangetastet lassen.
+    const eintraege=bestand.eintraege||{};
+    for(const [id,werte] of Object.entries(EINTRAEGE)){
+      const sauber={};
+      for(const f of ['kategorien','status','notiz','ausgeblendet'])
+        if(werte[f] && (!Array.isArray(werte[f])||werte[f].length)) sauber[f]=werte[f];
+      if(Object.keys(sauber).length) eintraege[id]=sauber; else delete eintraege[id];
+    }
+    const neu={kategorien:CATS,eintraege};
+    const inhalt=btoa(unescape(encodeURIComponent(JSON.stringify(neu,null,2))));
+    const antwort=await fetch(url,{method:'PUT',headers:{...kopf,'Content-Type':'application/json'},
+      body:JSON.stringify({message:'Board online bearbeitet',content:inhalt,sha:datei.sha})});
+    if(antwort.status===409)
+      return {ok:false,fehler:'Jemand anderes hat gerade gespeichert. Seite neu laden und nochmal versuchen.'};
+    if(!antwort.ok) return {ok:false,fehler:'Speichern abgelehnt ('+antwort.status+').'};
+    return {ok:true};
+  }catch(e){ return {ok:false,fehler:'Keine Verbindung zu GitHub.'}; }
+}
 if(MOBILE)document.getElementById('mobnote').style.display='block';
 let cf='alle',of='alle',tf='alle',q='',noted=false,zeigeAus=false,bearbeiten=false;
 const nk=i=>'cn_'+i,sk=i=>'cs_'+i,ck=i=>'cc_'+i;
@@ -115,6 +156,11 @@ function hole(v,feld){
   return e[feld]||'';
 }
 function setze(v,feld,wert){
+  if(NURLESEN){        // online: erst im Speicher merken, der Speichern-Knopf schickt alles
+    const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={kategorien:v.cats});
+    if(wert)e[feld]=wert; else delete e[feld];
+    aenderungGemerkt(); return;
+  }
   if(!LIVE){localStorage.setItem(feldKey[feld](v.id),wert);return;}
   const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={kategorien:v.cats});
   if(wert)e[feld]=wert; else delete e[feld];
@@ -129,6 +175,10 @@ function holeKategorien(v){
   return Array.isArray(e.kategorien)?e.kategorien:v.cats;
 }
 function setzeKategorien(v,liste){
+  if(NURLESEN){
+    const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={});
+    e.kategorien=liste; aenderungGemerkt(); return;
+  }
   if(!LIVE){localStorage.setItem(ck(v.id),JSON.stringify(liste));return;}
   const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={});
   e.kategorien=liste;
@@ -174,7 +224,7 @@ function render(){
     c.innerHTML=media+`<div class="meta">
       <div class="name">${v.type==='link'?(v.date||''):v.name}</div>
       <div class="tags"><span class="tag ${v.origin==='Inbox (neu)'?'new':''}">${v.origin}</span><span class="tag">${v.folder}</span>${v.mb?`<span class="tag">${v.mb} MB</span>`:''}</div>
-      ${NURLESEN
+      ${!BEARBEITBAR
         ? `<div class="tags">${kats.map(k=>`<span class="tag">${k}</span>`).join('')}${st?`<span class="tag new">${st}</span>`:''}</div>
            ${note?`<div class="notiz">${note.replace(/</g,'&lt;')}</div>`:''}`
         : `<details class="cats"><summary>Themen (${kats.length})</summary>
@@ -366,11 +416,62 @@ document.querySelectorAll('.of').forEach(c=>c.onclick=()=>{document.querySelecto
 document.querySelectorAll('.tf').forEach(c=>c.onclick=()=>{document.querySelectorAll('.tf').forEach(x=>x.classList.remove('on'));c.classList.add('on');tf=c.dataset.t;render();});
 document.getElementById('q').oninput=e=>{q=e.target.value.toLowerCase();render();};
 function tg(b){noted=!noted;b.classList.toggle('ghost');render();}
+function aenderungGemerkt(){
+  offeneAenderungen=true;
+  const k=document.getElementById('speichern');
+  if(k){ k.textContent='● Speichern'; k.classList.remove('ghost'); }
+}
+
+async function jetztSpeichern(){
+  const k=document.getElementById('speichern');
+  k.disabled=true; k.textContent='speichert …';
+  const j=await ghSpeichern();
+  k.disabled=false;
+  if(j.ok){
+    offeneAenderungen=false;
+    k.textContent='✓ Gespeichert'; k.classList.add('ghost');
+    setTimeout(()=>{if(!offeneAenderungen)k.textContent='Speichern';},4000);
+  }else{
+    k.textContent='● Speichern';
+    alert('Konnte nicht speichern:\n\n'+j.fehler);
+  }
+}
+
+function anmelden(){
+  const vorhanden=!!token();
+  if(vorhanden && !confirm('Du bist angemeldet. Zugang von diesem Gerät entfernen?')) return;
+  if(vorhanden){ try{localStorage.removeItem(tokenSchluessel);}catch(e){} location.reload(); return; }
+  const t=(prompt('GitHub-Zugangsschlüssel einfügen.\n\n'
+    +'Den erzeugst du einmalig unter github.com → Einstellungen → Developer settings →\n'
+    +'Personal access tokens → Fine-grained tokens, mit Schreibrecht für dieses Repository.')||'').trim();
+  if(!t) return;
+  try{localStorage.setItem(tokenSchluessel,t);}catch(e){alert('Konnte nicht speichern.');return;}
+  location.reload();
+}
+
 if(NURLESEN){   // veröffentlichte Fassung: Ausgeblendetes ist gar nicht erst enthalten
   document.getElementById('ausbtn').style.display='none';
   document.getElementById('mobnote').style.display='none';
-  document.querySelector('.help').innerHTML='👀 <b>Nur zum Ansehen.</b> Dieser Stand kommt von Felix — '
-    +'filtern und Videos abspielen geht, Änderungen werden hier nicht gespeichert.';
+  const leiste=document.getElementById('ausbtn').parentNode;
+
+  const an=document.createElement('button');
+  an.className='btn ghost';
+  an.textContent=token()?'Abmelden':'Anmelden zum Bearbeiten';
+  an.onclick=anmelden;
+  leiste.appendChild(an);
+
+  if(BEARBEITBAR){
+    const sp=document.createElement('button');
+    sp.className='btn ghost'; sp.id='speichern'; sp.textContent='Speichern';
+    sp.onclick=jetztSpeichern;
+    leiste.appendChild(sp);
+    document.querySelector('.help').innerHTML='✏️ <b>Bearbeitungsmodus.</b> Themen, Status und '
+      +'Notizen ändern, dann auf <b>Speichern</b> — dein Team sieht es etwa eine Minute später.';
+    window.addEventListener('beforeunload',e=>{ if(offeneAenderungen){e.preventDefault();e.returnValue='';} });
+  }else{
+    document.querySelector('.help').innerHTML='👀 <b>Nur zum Ansehen.</b> Filtern und Videos '
+      +'abspielen geht. Zum Bearbeiten oben auf <b>Anmelden</b>.';
+  }
 }
 document.getElementById('ausbtn').onclick=function(){zeigeAus=!zeigeAus;this.textContent=zeigeAus?'Zurück zum Board':'Ausgeblendete zeigen';this.classList.toggle('ghost');render();};
 function ex(){const o={exportiert:new Date().toISOString(),eintraege:[]};
