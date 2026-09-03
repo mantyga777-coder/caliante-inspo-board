@@ -1,9 +1,11 @@
-# Videos und Bilder bleiben lokal — zu groß für GitHub (1,2 GB, wächst weiter).
-INSPO_INBOX/
+# Original-Videos und -Bilder bleiben lokal — zu groß für GitHub (1,2 GB, wächst weiter).
+# Der führende Schrägstrich ist wichtig: sonst würde auch web/INSPO_INBOX/ ausgeschlossen,
+# und genau die verkleinerten Fassungen dort sollen ja hochgeladen werden.
+/INSPO_INBOX/
 
 # Erzeugte und flüchtige Sachen
-_Themen/
-_papierkorb/
+/_Themen/
+/_papierkorb/
 .board_server.log
 .DS_Store
 *.zip

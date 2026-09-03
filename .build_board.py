@@ -123,7 +123,7 @@ if os.path.isdir(BILDER_ORDNER):
         for f in dateien:
             full=os.path.join(ordner,f); rel=os.path.relpath(full,BASE)
             gesamt+=os.path.getsize(full); neuestes=max(neuestes,os.path.getmtime(full))
-            bilder.append({"src":bild_quelle(rel,full),"thumb":bild_thumb(rel,full)})
+            bilder.append({"src":bild_quelle(rel,full),"thumb":bild_thumb(rel,full),"orig":rel})
         rel_slot=os.path.relpath(ordner,BASE)
         e=anreichern({"type":"bilder","id":rel_slot,"name":slot,"folder":"Bilder","src":"",
             "origin":"Inbox (neu)","cat":guess(rel_slot),"mb":round(gesamt/1048576,1),
@@ -164,14 +164,44 @@ def themen_ordner_bauen(sichtbar):
             os.symlink(quelle,ziel); angelegt+=1
     return angelegt
 
+WEB_ORDNER = os.path.join(BASE, "web")   # verkleinerte Fassungen für die Team-Seite im Netz
+
+def web_kopie(rel, full):
+    """Kleine Web-Fassung anlegen (falls noch nicht da) und ihren Pfad zurückgeben.
+    Inspo-Referenzen brauchen keine Master-Qualität — spart ~98% Größe."""
+    ziel = os.path.join(WEB_ORDNER, rel)
+    if os.path.exists(ziel) and os.path.getmtime(ziel) >= os.path.getmtime(full):
+        return urllib.parse.quote(os.path.relpath(ziel, BASE).replace(os.sep,'/'))
+    os.makedirs(os.path.dirname(ziel), exist_ok=True)
+    try:
+        if rel.lower().endswith(BILD_EXT):
+            ziel = os.path.splitext(ziel)[0] + ".jpg"
+            subprocess.run([SIPS,"-s","format","jpeg","-Z","1400","--out",ziel,full],
+                           check=True, capture_output=True)
+        else:
+            subprocess.run([FFMPEG,"-y","-loglevel","error","-i",full,
+                            "-vf","scale=-2:720","-c:v","libx264","-crf","28","-preset","fast",
+                            "-c:a","aac","-b:a","96k","-movflags","+faststart",ziel], check=True)
+    except Exception as fehler:
+        print(f"  ! Web-Fassung fehlgeschlagen für {rel}: {fehler}")
+        return ""
+    return urllib.parse.quote(os.path.relpath(ziel, BASE).replace(os.sep,'/'))
+
 origins=["Inbox (neu)","Referenz","Eigenes Material"]
 
 gekappt=0
-def build(mobile):
+def build(mobile, web=False):
     global gekappt
     data=[]
     for e in entries:
         d=dict(e); d.pop("ts",None)
+        if web:
+            # Team-Seite: auf die verkleinerten Web-Fassungen zeigen, nicht auf lokale Pfade.
+            if e["type"]=="video":
+                d["src"]=web_kopie(e["id"], os.path.join(BASE,e["id"]))
+            elif e["type"]=="bilder":
+                d["bilder"]=[{"src":web_kopie(b["orig"], os.path.join(BASE,b["orig"])),
+                              "thumb":b["thumb"]} for b in e["bilder"]]
         if mobile and e["type"]=="video": d.pop("src",None)
         if mobile and e["type"]=="bilder":
             # Handy-Datei trägt alles in sich — darum nur die Vorschaubilder und nicht endlos viele.
@@ -185,7 +215,7 @@ def build(mobile):
     out=out.replace("__N__",str(sum(1 for e in entries if not e.get("aus"))))
     out=out.replace("__DATE__",datetime.date.today().strftime("%d.%m.%Y"))
     out=out.replace("__MOBILE__","true" if mobile else "false")
-    name="CALIANTE_BOARD_HANDY.html" if mobile else "CALIANTE_VIDEO_BOARD.html"
+    name="index.html" if web else ("CALIANTE_BOARD_HANDY.html" if mobile else "CALIANTE_VIDEO_BOARD.html")
     open(os.path.join(BASE,name),"w",encoding='utf-8').write(out)
     ICLOUD="/sessions/tender-dazzling-sagan/mnt/com~apple~CloudDocs/CALIANTE"
     if mobile and os.path.isdir(ICLOUD):
@@ -194,6 +224,9 @@ def build(mobile):
 
 for m in (False,True):
     n,s=build(m); print(f"{n}: {s/1024:.0f} KB")
+if "--web" in sys.argv:   # zusätzlich die Fassung fürs Team im Netz, mit verkleinerten Videos
+    print("Web-Fassungen werden erzeugt (einmalig je Datei, danach schnell) …")
+    n,s=build(False, web=True); print(f"{n}: {s/1024:.0f} KB")
 sichtbar=[e for e in entries if not e.get("aus")]
 slots=[e for e in sichtbar if e["type"]=="bilder"]
 themen_n=themen_ordner_bauen(sichtbar)
