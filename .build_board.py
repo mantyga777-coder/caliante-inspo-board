@@ -170,12 +170,17 @@ def web_kopie(rel, full):
     """Kleine Web-Fassung anlegen (falls noch nicht da) und ihren Pfad zurückgeben.
     Inspo-Referenzen brauchen keine Master-Qualität — spart ~98% Größe."""
     ziel = os.path.join(WEB_ORDNER, rel)
+    ist_bild = rel.lower().endswith(BILD_EXT)
+    # Endung vor der Existenzprüfung festlegen: Bilder werden immer .jpg (klein). Sonst prüft
+    # der Mac case-insensitiv gegen ".JPG", liefert den Pfad in Großschreibung zurück — und der
+    # Server von GitHub unterscheidet Groß-/Kleinschreibung sehr wohl und antwortet mit 404.
+    if ist_bild:
+        ziel = os.path.splitext(ziel)[0] + ".jpg"
     if os.path.exists(ziel) and os.path.getmtime(ziel) >= os.path.getmtime(full):
         return urllib.parse.quote(os.path.relpath(ziel, BASE).replace(os.sep,'/'))
     os.makedirs(os.path.dirname(ziel), exist_ok=True)
     try:
-        if rel.lower().endswith(BILD_EXT):
-            ziel = os.path.splitext(ziel)[0] + ".jpg"
+        if ist_bild:
             subprocess.run([SIPS,"-s","format","jpeg","-Z","1400","--out",ziel,full],
                            check=True, capture_output=True)
         else:
