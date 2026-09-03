@@ -5,6 +5,18 @@ echo ""
 echo "  CALIANTÉ — Board wird veröffentlicht …"
 echo ""
 
+# Erst holen, was online geändert wurde (z.B. von Felix), sonst überschreibt dieser
+# Rechner seine Arbeit. Bei einem Konflikt lieber abbrechen als etwas zerstören.
+if ! git pull --rebase --autostash -q 2>/dev/null; then
+  git rebase --abort 2>/dev/null
+  echo "  Achtung: Online gibt es Änderungen, die sich nicht automatisch"
+  echo "  mit deinen zusammenführen lassen. Nichts wurde hochgeladen."
+  echo "  Sag Claude Bescheid, dann löse ich das auf."
+  echo ""
+  read -n 1 -s -r -p "  (Taste zum Schließen)"
+  exit 1
+fi
+
 # --web ist entscheidend: erzeugt index.html mit den verkleinerten, abspielbaren Videos.
 # Ohne den Schalter hätte die Team-Seite nur Standbilder.
 python3 .build_board.py --web || { echo "  Bauen fehlgeschlagen."; read -n 1 -s -r -p "  (Taste zum Schließen)"; exit 1; }

@@ -228,6 +228,12 @@ def build(mobile, web=False):
     out=out.replace("__BAU__", bau_kennung)
     if web:
         open(os.path.join(BASE,"version.txt"),"w",encoding='utf-8').write(bau_kennung)
+    if web:
+        # Die Eintragsliste getrennt ablegen: damit kann GitHub die Seite selbst neu bauen,
+        # ohne Zugriff auf INSPO_INBOX auf dem Mac. Grundlage fürs Online-Bearbeiten.
+        json.dump({"eintraege":data,"kategorien":CATS},
+                  open(os.path.join(BASE,"eintraege.json"),"w",encoding='utf-8'),
+                  ensure_ascii=False)
     name="index.html" if web else ("CALIANTE_BOARD_HANDY.html" if mobile else "CALIANTE_VIDEO_BOARD.html")
     open(os.path.join(BASE,name),"w",encoding='utf-8').write(out)
     ICLOUD="/sessions/tender-dazzling-sagan/mnt/com~apple~CloudDocs/CALIANTE"

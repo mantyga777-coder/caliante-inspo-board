@@ -1,0 +1,77 @@
+name: Board neu bauen
+
+# Läuft, sobald jemand die Daten ändert — auch direkt hier auf GitHub.
+# Damit sieht das Team Änderungen, ohne dass Felix' Mac laufen muss.
+on:
+  push:
+    branches: [main]
+    paths:
+      - BOARD_DATEN.json
+      - eintraege.json
+      - .board_template.html
+      - render_web.py
+  workflow_dispatch:        # erlaubt manuelles Auslösen über die GitHub-Oberfläche
+
+permissions:
+  contents: write
+
+jobs:
+  bauen:
+    runs-on: ubuntu-latest
+    # Wenn Felix lokal veröffentlicht, ist index.html schon fertig mitgeliefert — dann
+    # nicht nochmal bauen, sonst läuft sein Mac dem Repository hinterher.
+    if: ${{ !startsWith(github.event.head_commit.message, 'Board-Stand vom') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Daten auf Gültigkeit prüfen
+        run: |
+          python3 -c "
+          import json, sys
+          try:
+              d = json.load(open('BOARD_DATEN.json', encoding='utf-8'))
+          except Exception as e:
+              print(f'BOARD_DATEN.json ist beschaedigt: {e}')
+              print('Die Seite bleibt unveraendert. Bitte die Datei korrigieren.')
+              sys.exit(1)
+          kats = [k for k in d.get('kategorien', []) if str(k).strip()]
+          if not kats:
+              print('Keine Themen in BOARD_DATEN.json — mindestens eines muss bleiben.')
+              sys.exit(1)
+          if len(kats) != len(set(kats)):
+              print('Zwei Themen heissen gleich.')
+              sys.exit(1)
+          print(f'Daten in Ordnung: {len(kats)} Themen, {len(d.get(\"eintraege\", {}))} Eintraege.')
+          "
+
+      - name: Seite bauen
+        run: python3 render_web.py
+
+      - name: Ergebnis prüfen
+        run: |
+          python3 -c "
+          import re, json, sys
+          h = open('index.html', encoding='utf-8').read()
+          d = json.loads(re.search(r'const DATA=(\[.*?\]), CATS=', h, re.S).group(1), strict=False)
+          videos = [v for v in d if v['type'] == 'video']
+          ohne = [v for v in videos if not v.get('src')]
+          if videos and ohne:
+              print(f'{len(ohne)} von {len(videos)} Videos ohne abspielbaren Pfad — Abbruch.')
+              sys.exit(1)
+          if 'NURLESEN=true' not in h:
+              print('Nur-Lesen-Modus fehlt — Abbruch.')
+              sys.exit(1)
+          print(f'Pruefung ok: {len(d)} Eintraege, {len(videos)} Videos abspielbar.')
+          "
+
+      - name: Veröffentlichen
+        run: |
+          if [ -z "$(git status --porcelain index.html version.txt)" ]; then
+            echo "Nichts zu veroeffentlichen — Seite ist bereits aktuell."
+            exit 0
+          fi
+          git config user.name "Board-Automatik"
+          git config user.email "actions@github.com"
+          git add index.html version.txt
+          git commit -m "Board neu gebaut nach Datenaenderung"
+          git push
