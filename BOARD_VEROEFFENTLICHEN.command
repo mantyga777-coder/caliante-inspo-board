@@ -5,10 +5,25 @@ echo ""
 echo "  CALIANTÉ — Board wird veröffentlicht …"
 echo ""
 
-python3 .build_board.py || { echo "  Bauen fehlgeschlagen."; read -n 1 -s -r -p "  (Taste zum Schließen)"; exit 1; }
+# --web ist entscheidend: erzeugt index.html mit den verkleinerten, abspielbaren Videos.
+# Ohne den Schalter hätte die Team-Seite nur Standbilder.
+python3 .build_board.py --web || { echo "  Bauen fehlgeschlagen."; read -n 1 -s -r -p "  (Taste zum Schließen)"; exit 1; }
 
-# Die eigenständige Fassung ist das, was das Team im Browser sieht.
-cp CALIANTE_BOARD_HANDY.html index.html
+# Sicherheitsnetz: nicht hochladen, wenn die Videos in der Team-Fassung nicht abspielbar wären.
+python3 - <<'PRUEFUNG' || { echo ""; echo "  Abgebrochen — nichts hochgeladen."; read -n 1 -s -r -p "  (Taste zum Schließen)"; exit 1; }
+import re, json, sys
+h = open("index.html", encoding="utf-8").read()
+d = json.loads(re.search(r"const DATA=(\[.*?\]), CATS=", h, re.S).group(1))
+videos = [v for v in d if v["type"] == "video"]
+ohne = [v for v in videos if not v.get("src")]
+if videos and ohne:
+    print(f"  ! {len(ohne)} von {len(videos)} Videos hätten keinen abspielbaren Pfad.")
+    sys.exit(1)
+if "NURLESEN=true" not in h:
+    print("  ! index.html ist nicht im Nur-Lesen-Modus — Team würde tote Knöpfe sehen.")
+    sys.exit(1)
+print(f"  Prüfung ok: {len(videos)} Videos abspielbar, Nur-Lesen-Modus aktiv.")
+PRUEFUNG
 
 if [ -z "$(git status --porcelain)" ]; then   # --porcelain sieht auch neue Dateien, git diff nicht
   echo ""
