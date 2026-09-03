@@ -222,6 +222,12 @@ def build(mobile, web=False):
     out=out.replace("__DATE__",datetime.date.today().strftime("%d.%m.%Y"))
     out=out.replace("__MOBILE__","true" if mobile else "false")
     out=out.replace("__NURLESEN__","true" if web else "false")
+    # Baukennung: GitHub lässt Browser die Seite 10 Minuten zwischenspeichern. Die Team-Fassung
+    # vergleicht diese Kennung mit version.txt und lädt sich bei Bedarf selbst neu.
+    bau_kennung = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    out=out.replace("__BAU__", bau_kennung)
+    if web:
+        open(os.path.join(BASE,"version.txt"),"w",encoding='utf-8').write(bau_kennung)
     name="index.html" if web else ("CALIANTE_BOARD_HANDY.html" if mobile else "CALIANTE_VIDEO_BOARD.html")
     open(os.path.join(BASE,name),"w",encoding='utf-8').write(out)
     ICLOUD="/sessions/tender-dazzling-sagan/mnt/com~apple~CloudDocs/CALIANTE"

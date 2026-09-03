@@ -79,7 +79,21 @@ select{width:100%;border:1px solid #e7ded4;border-radius:6px;padding:5px 6px;fon
 <div class="count" id="count"></div>
 <div class="grid" id="grid"></div>
 <script>
-const DATA=__DATA__, CATS=__CATS__, MOBILE=__MOBILE__, NURLESEN=__NURLESEN__;
+const DATA=__DATA__, CATS=__CATS__, MOBILE=__MOBILE__, NURLESEN=__NURLESEN__, BAU="__BAU__";
+if(NURLESEN){
+  // GitHub erlaubt Browsern, diese Seite 10 Minuten zwischenzuspeichern. Damit niemand aus
+  // Versehen einen veralteten Stand sieht: nachsehen, ob es einen neueren gibt, und dann
+  // einmalig mit eindeutiger Adresse neu laden (nur so umgeht man den Zwischenspeicher).
+  fetch('version.txt?t='+Date.now(),{cache:'no-store'})
+    .then(a=>a.ok?a.text():null)
+    .then(v=>{
+      if(!v)return;
+      v=v.trim();
+      const schonVersucht=new URLSearchParams(location.search).get('v')===v;
+      if(v!==BAU && !schonVersucht) location.replace(location.pathname+'?v='+encodeURIComponent(v));
+    })
+    .catch(()=>{});
+}
 // NURLESEN ist die veröffentlichte Team-Fassung: dahinter steht kein Server, also keine
 // Bearbeiten-Knöpfe. Sonst: Bearbeiten nur lokal über BOARD_STARTEN.command.
 const LIVE=!NURLESEN && location.protocol.startsWith('http');
