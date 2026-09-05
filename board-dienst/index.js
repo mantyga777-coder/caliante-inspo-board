@@ -5,10 +5,18 @@ const DATEI = "BOARD_DATEN.json";
 const HERKUNFT = "https://mantyga777-coder.github.io";
 const FELDER = ["kategorien", "status", "notiz", "ausgeblendet"];
 
+// Zwischenlager für hochgeladene Dateien: ein GitHub-Release mit diesem Namensschild.
+const TAG = "eingang";
+// Cloudflare lässt höchstens 100 MB durch — 95 MB als Grenze, damit die Absage von uns
+// kommt und nicht als unverständlicher Abbruch mitten im Hochladen.
+const MAX_BYTES = 95 * 1024 * 1024;
+// Was verarbeitet werden kann. .heic fehlt mit Absicht: ffmpeg auf GitHub kann es nicht.
+const ENDUNGEN = [".mp4", ".mov", ".webm", ".m4v", ".mkv", ".jpg", ".jpeg", ".png", ".webp"];
+
 const CORS = {
   "Access-Control-Allow-Origin": HERKUNFT,
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Headers": "Content-Type, X-Board-Passwort",
   "Access-Control-Max-Age": "86400",
 };
 
@@ -113,17 +121,183 @@ async function speichern(env, aenderungen, kategorien) {
   return { ok: true };
 }
 
+// Felix sieht diese Sätze im Board — deshalb keine Fehlernummern ohne Erklärung.
+function githubFehler(status) {
+  if (status === 401 || status === 403)
+    return "Der Zugang zu GitHub ist abgelaufen — Felix muss einen neuen Schlüssel hinterlegen.";
+  return `GitHub antwortet gerade nicht (${status}). Bitte in ein paar Minuten nochmal.`;
+}
+
+// Vertrag D: erlaubt sind nur A-Z a-z 0-9 . _ - , alles andere wird zu "_".
+// Die 120 Zeichen gelten für den fertigen Namen samt Vorsatz, denn genau so landet er im
+// Ordner eingang/ und wird dort erneut auf 120 gekürzt. Gekürzt wird deshalb hier schon der
+// Namensteil und nie die Endung — ohne Endung würde die Datei drüben aussortiert.
+function endgueltigerName(rohName, endung) {
+  const zeit = new Date().toISOString().replace(/[-:]/g, ""); // 20260905T161422.000Z
+  const zufall = [...crypto.getRandomValues(new Uint8Array(3))]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const vorsatz = `${zeit.slice(0, 8)}-${zeit.slice(9, 15)}-${zufall}_`;
+  const basis =
+    rohName.slice(0, rohName.length - endung.length).replace(/[^A-Za-z0-9._-]/g, "_") || "datei";
+  return vorsatz + basis.slice(0, 120 - vorsatz.length - endung.length) + endung;
+}
+
+// Der Ablageort ist ein Release mit dem Namensschild "eingang". Er wird gesucht und
+// notfalls neu angelegt — auf eine feste Nummer ist kein Verlass, jemand kann ihn löschen.
+async function eingangsRelease(kopf) {
+  const suchen = () =>
+    fetch(`https://api.github.com/repos/${REPO}/releases/tags/${TAG}`, { headers: kopf });
+
+  let da = await suchen();
+  if (da.ok) return { release: await da.json() };
+  if (da.status !== 404) return { fehler: githubFehler(da.status) };
+
+  const angelegt = await fetch(`https://api.github.com/repos/${REPO}/releases`, {
+    method: "POST",
+    headers: { ...kopf, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      tag_name: TAG,
+      name: "Eingang",
+      body: "Ablage für frisch hochgeladene Dateien. Wird nach der Verarbeitung geleert.",
+    }),
+  });
+  if (angelegt.ok) return { release: await angelegt.json() };
+
+  // Laden zwei Leute gleichzeitig hoch, legt der eine den Ablageort an und der andere
+  // bekommt "gibt es schon" — dann reicht es, ihn einfach noch einmal zu suchen.
+  da = await suchen();
+  if (da.ok) return { release: await da.json() };
+  return { fehler: githubFehler(angelegt.status) };
+}
+
+// Beim Hochladen steht das Passwort in der Kopfzeile und wird geprüft, BEVOR der Rumpf
+// angefasst wird: der Rumpf ist ein Video, und dieser Dienst hat weder Speicher noch
+// Rechenzeit, um es auch nur einmal komplett zu lesen. Er reicht es nur durch.
+async function hochladen(request, env, adresse) {
+  // Der Browser kodiert das Passwort, weil HTTP-Kopfzeilen nur Latin-1 tragen und ein
+  // Umlaut setRequestHeader() sonst abbrechen lässt. Hier also wieder auspacken.
+  let eingabe = request.headers.get("X-Board-Passwort") || "";
+  try {
+    eingabe = decodeURIComponent(eingabe);
+  } catch (e) {
+    // Kaputte Kodierung: unverändert weiterreichen, die Prüfung schlägt dann sauber fehl.
+  }
+  if (!(await passwortStimmt(eingabe, env.BOARD_PASSWORT)))
+    return antwort({ ok: false, fehler: "Passwort stimmt nicht." }, 401);
+
+  // Die Länge muss von vornherein feststehen: GitHub nimmt den Strom sonst nicht an.
+  const laenge = Number(request.headers.get("Content-Length"));
+  if (!Number.isInteger(laenge) || laenge <= 0)
+    return antwort({ ok: false, fehler: "Die Datei ist leer oder kam nicht vollständig an." }, 400);
+  if (laenge > MAX_BYTES)
+    return antwort(
+      {
+        ok: false,
+        fehler:
+          "Diese Datei ist zu groß — mehr als 95 MB gehen nicht durch. Bitte eine kürzere oder kleinere Fassung hochladen.",
+      },
+      413
+    );
+
+  const rohName = (adresse.searchParams.get("name") || "").trim();
+  const endung = ENDUNGEN.find((e) => rohName.toLowerCase().endsWith(e));
+  if (!endung)
+    return antwort(
+      {
+        ok: false,
+        fehler:
+          "Mit dieser Datei kann das Board nichts anfangen. Es gehen Videos (mp4, mov, webm, m4v, mkv) und Bilder (jpg, png, webp).",
+      },
+      400
+    );
+
+  const name = endgueltigerName(rohName, endung);
+  const kopf = {
+    Authorization: "Bearer " + env.GH_TOKEN,
+    Accept: "application/vnd.github+json",
+    "User-Agent": "caliante-board-dienst",
+  };
+
+  const { release, fehler } = await eingangsRelease(kopf);
+  if (fehler) return antwort({ ok: false, fehler }, 502);
+
+  // FixedLengthStream statt eines gewöhnlichen Stroms: Cloudflare würde die Daten sonst in
+  // Häppchen ohne Längenangabe verschicken, und genau das lehnt uploads.github.com ab.
+  const durchreiche = new FixedLengthStream(laenge);
+  // Bewusst ohne await — erst das fetch unten holt die Daten ab. Ein await hier würde
+  // warten, bis der Strom leer ist, und das passiert nie, weil niemand ihn liest.
+  request.body.pipeTo(durchreiche.writable).catch(() => {});
+
+  const hoch = await fetch(
+    `https://uploads.github.com/repos/${REPO}/releases/${release.id}/assets?name=${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      headers: { ...kopf, "Content-Type": "application/octet-stream" },
+      body: durchreiche.readable,
+    }
+  );
+  if (!hoch.ok) return antwort({ ok: false, fehler: githubFehler(hoch.status) }, 502);
+
+  // Anklopfen: die Datei liegt bereit, jetzt darf GitHub sie verarbeiten.
+  const anklopfen = await fetch(`https://api.github.com/repos/${REPO}/dispatches`, {
+    method: "POST",
+    headers: { ...kopf, "Content-Type": "application/json" },
+    body: JSON.stringify({ event_type: "neuer-upload" }),
+  });
+  // Die Datei ist sicher angekommen, aber ohne Anklopfen passiert nichts weiter — das
+  // muss Felix erfahren, sonst wartet er vergeblich darauf, dass sie im Board auftaucht.
+  if (!anklopfen.ok)
+    return antwort(
+      {
+        ok: false,
+        fehler:
+          "Die Datei ist angekommen, aber das Board baut sich gerade nicht von allein neu. Bitte Felix Bescheid geben.",
+      },
+      502
+    );
+
+  return antwort({ ok: true, datei: name });
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     if (request.method !== "POST") return antwort({ ok: false, fehler: "Nur POST." }, 405);
 
-    const pfad = new URL(request.url).pathname;
-    if (pfad !== "/anmelden" && pfad !== "/speichern")
+    const adresse = new URL(request.url);
+    const pfad = adresse.pathname;
+    if (pfad !== "/anmelden" && pfad !== "/speichern" && pfad !== "/hochladen")
       return antwort({ ok: false, fehler: "Unbekannt." }, 404);
 
-    // Bremse gegen Passwort-Raten, pro Absender.
     const ip = request.headers.get("CF-Connecting-IP") || "unbekannt";
+
+    // Das Hochladen läuft vor allem anderen ab: unten wird immer erst der Rumpf gelesen,
+    // und ein Video darf hier nicht gelesen werden.
+    if (pfad === "/hochladen") {
+      // Eine eigene Bremse mit eigenem Zähler: eine Bilderserie sind viele Anfragen kurz
+      // hintereinander, ein Passwortversuch nicht. Fehlt LIMIT_HOCHLADEN noch in
+      // wrangler.toml, greift ersatzweise die alte Bremse — dann zwar knapp, aber die
+      // Uploads blockieren wenigstens nicht die Anmeldung.
+      const bremse = env.LIMIT_HOCHLADEN || env.LIMIT;
+      const { success } = await bremse.limit({ key: "hochladen:" + ip });
+      if (!success)
+        return antwort(
+          {
+            ok: false,
+            fehler:
+              "Es kamen gerade sehr viele Dateien auf einmal. Bitte eine Minute warten und den Rest noch einmal hochladen.",
+          },
+          429
+        );
+      try {
+        return await hochladen(request, env, adresse);
+      } catch (e) {
+        return antwort({ ok: false, fehler: "Das Hochladen hat nicht geklappt. Bitte noch einmal versuchen." }, 502);
+      }
+    }
+
+    // Bremse gegen Passwort-Raten, pro Absender.
     const { success } = await env.LIMIT.limit({ key: ip });
     if (!success) return antwort({ ok: false, fehler: "Zu viele Versuche. Bitte kurz warten." }, 429);
 

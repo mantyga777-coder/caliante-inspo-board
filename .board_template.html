@@ -68,6 +68,10 @@ select{width:100%;border:1px solid #e7ded4;border-radius:6px;padding:5px 6px;fon
 .up{display:none;border:1.5px dashed var(--taupe);border-radius:11px;background:#fff;padding:15px;margin-bottom:10px;text-align:center;font-size:12px;color:var(--mocha);cursor:pointer;}
 .up b{display:block;font-size:13px;color:var(--esp);margin-bottom:3px;}
 .up.hot{background:var(--butter);border-color:var(--esp);border-style:solid;}
+/* Fortschritt beim Hochladen — ohne sichtbaren Balken hält jeder die Seite für eingefroren. */
+.bal{height:7px;border-radius:999px;background:var(--creme);overflow:hidden;margin:10px 0 5px;}
+.bal i{display:block;height:100%;width:0;background:var(--esp);border-radius:999px;transition:width .25s;}
+.baltext{font-size:11px;}
 .del{border:1px solid #e7ded4;background:#fff;color:var(--mocha);border-radius:7px;padding:5px;font-size:11px;cursor:pointer;font-family:inherit;}
 .del:hover{background:var(--creme);color:var(--esp);}
 </style></head><body>
@@ -190,6 +194,9 @@ function setzeKategorien(v,liste){
 
 let sicherTimer=null;
 function sichern(sofort){
+  // Online gibt es keinen Server, der mitschreibt: die Änderung liegt im Speicher und geht
+  // erst mit dem Speichern-Knopf zu GitHub. Also hier nur den Knopf aufleuchten lassen.
+  if(NURLESEN){aenderungGemerkt();return Promise.resolve({ok:true});}
   if(!LIVE)return Promise.resolve({ok:true});
   clearTimeout(sicherTimer);
   return new Promise(fertig=>{sicherTimer=setTimeout(async()=>{
@@ -201,6 +208,12 @@ function sichern(sofort){
     }catch(e){alert('Server nicht erreichbar — läuft BOARD_STARTEN.command noch?');fertig({ok:false});}
   },sofort?0:600);});
 }
+
+// Dateinamen, Notizen und Themen kommen aus fremder Hand — spätestens seit dem Hochladen
+// vom Team. Ein Anführungszeichen im Namen bräche sonst aus dem Attribut aus und brächte
+// fremden Code auf die Seite, und zwar für alle Betrachter.
+const escTab={'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'};
+function esc(t){return String(t==null?'':t).replace(/[&<>"']/g,z=>escTab[z]);}
 
 function render(){
   const g=document.getElementById('grid');g.innerHTML='';let n=0;
@@ -214,28 +227,28 @@ function render(){
     const c=document.createElement('div');c.className='card'+(ausgeblendet?' aus':'');
     let media;
     if(v.type==='link'){
-      media=`<a class="linkbox" href="${v.src}" target="_blank" rel="noopener"><div class="pl">${v.folder.toUpperCase()}</div><div style="font-size:12px;line-height:1.4">${v.name}</div><div class="op">Öffnen ↗</div></a>`;
+      media=`<a class="linkbox" href="${esc(v.src)}" target="_blank" rel="noopener"><div class="pl">${esc(v.folder.toUpperCase())}</div><div style="font-size:12px;line-height:1.4">${esc(v.name)}</div><div class="op">Öffnen ↗</div></a>`;
     } else if(v.type==='bilder'){
-      media=`<div class="slot"><img src="${bildQuelle(v,0)}" alt="">
+      media=`<div class="slot"><img src="${esc(bildQuelle(v,0))}" alt="">
         <button class="nav zur" disabled>‹</button><button class="nav vor" ${v.bilder.length<2?'disabled':''}>›</button>
         <span class="zaehler">1 / ${v.bilder.length}</span></div>`;
     } else if(MOBILE || !v.src){
-      media=v.thumb?`<div class="ph"><img class="ph" src="${v.thumb}" alt=""><div class="play"><span>▶</span></div></div>`:`<div class="ph"><div class="play"><span>▶</span></div></div>`;
+      media=v.thumb?`<div class="ph"><img class="ph" src="${esc(v.thumb)}" alt=""><div class="play"><span>▶</span></div></div>`:`<div class="ph"><div class="play"><span>▶</span></div></div>`;
     } else {
-      media=`<video controls preload="none" playsinline ${v.thumb?`poster="${v.thumb}"`:''} src="${v.src}"></video>`;
+      media=`<video controls preload="none" playsinline ${v.thumb?`poster="${esc(v.thumb)}"`:''} src="${esc(v.src)}"></video>`;
     }
     c.innerHTML=media+`<div class="meta">
-      <div class="name">${v.type==='link'?(v.date||''):v.name}</div>
-      <div class="tags"><span class="tag ${v.origin==='Inbox (neu)'?'new':''}">${v.origin}</span><span class="tag">${v.folder}</span>${v.mb?`<span class="tag">${v.mb} MB</span>`:''}</div>
+      <div class="name">${esc(v.type==='link'?(v.date||''):v.name)}</div>
+      <div class="tags"><span class="tag ${v.origin==='Inbox (neu)'?'new':''}">${esc(v.origin)}</span><span class="tag">${esc(v.folder)}</span>${v.mb?`<span class="tag">${esc(v.mb)} MB</span>`:''}</div>
       ${!BEARBEITBAR
-        ? `<div class="tags">${kats.map(k=>`<span class="tag">${k}</span>`).join('')}${st?`<span class="tag new">${st}</span>`:''}</div>
-           ${note?`<div class="notiz">${note.replace(/</g,'&lt;')}</div>`:''}`
+        ? `<div class="tags">${kats.map(k=>`<span class="tag">${esc(k)}</span>`).join('')}${st?`<span class="tag new">${esc(st)}</span>`:''}</div>
+           ${note?`<div class="notiz">${esc(note)}</div>`:''}`
         : `<details class="cats"><summary>Themen (${kats.length})</summary>
-        <div class="catlist">${CATS.map(x=>`<label><input type="checkbox" value="${x}" ${kats.includes(x)?'checked':''}> ${x}</label>`).join('')}</div>
+        <div class="catlist">${CATS.map(x=>`<label><input type="checkbox" value="${esc(x)}" ${kats.includes(x)?'checked':''}> ${esc(x)}</label>`).join('')}</div>
       </details>
       <select class="st"><option value="">— Status —</option>${['Vorlage','Eingeplant','Abgedreht','Gepostet','Verwerfen'].map(s=>`<option ${st===s?'selected':''}>${s}</option>`).join('')}</select>
-      <textarea placeholder="Warum gespeichert? Was übernehmen?">${note.replace(/</g,'&lt;')}</textarea><div class="saved"></div>`}
-      ${LIVE&&(v.type==='video'||v.type==='bilder')?(ausgeblendet?'<button class="del">↩︎ Zurückholen</button>':'<button class="del">🗑 Aus dem Board nehmen</button>'):''}</div>`;
+      <textarea placeholder="Warum gespeichert? Was übernehmen?">${esc(note)}</textarea><div class="saved"></div>`}
+      ${BEARBEITBAR&&(v.type==='video'||v.type==='bilder')?(ausgeblendet?'<button class="del">↩︎ Zurückholen</button>':'<button class="del">🗑 Aus dem Board nehmen</button>'):''}</div>`;
     if(v.type==='bilder')swipeAn(c,v);
     const ta=c.querySelector('textarea'),sv=c.querySelector('.saved');
     if(ta)ta.addEventListener('input',()=>{setze(v,'notiz',ta.value);sv.textContent='✓';setTimeout(()=>sv.textContent='',1000);});
@@ -287,6 +300,12 @@ function swipeAn(karte,v){
 }
 
 async function entfernen(v,knopf){
+  if(NURLESEN){   // online kann niemand Dateien verschieben — die Karte wird nur ausgeblendet
+    if(!confirm(v.name+'\n\nAus dem Board nehmen?\nDie Karte verschwindet für alle, sobald du auf Speichern drückst.\nDie Datei selbst bleibt erhalten; zurückholen geht danach nur am Mac-Board.'))return;
+    const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={kategorien:v.cats});
+    e.ausgeblendet=true;
+    aenderungGemerkt();render();return;
+  }
   const eigen=v.id.startsWith('INSPO_INBOX/');
   const text=eigen
     ? v.name+'\n\nAus dem Board nehmen?\nDie Datei wandert in den Ordner _papierkorb.'
@@ -306,7 +325,7 @@ async function zurueckholen(v,knopf){
 /* ---- Themenleiste: filtern, umbenennen, löschen, neu anlegen ---- */
 function bauChips(){
   const b=document.getElementById('catbar');b.innerHTML='';
-  if(LIVE){   // ganz vorn, sonst rutscht der Knopf bei vielen Themen aus dem Bild
+  if(BEARBEITBAR){   // ganz vorn, sonst rutscht der Knopf bei vielen Themen aus dem Bild
     const t=document.createElement('button');t.className='btn ghost';
     t.textContent=bearbeiten?'✓ Fertig':'Themen bearbeiten';
     t.onclick=()=>{bearbeiten=!bearbeiten;bauChips();};
@@ -321,7 +340,7 @@ function bauChips(){
     s.className='chip cf'+(cf===c?' on':'');
     s.textContent=c==='alle'?'Alle':c;
     s.onclick=()=>{cf=c;bauChips();ablageText();render();};
-    if(c!=='alle'&&LIVE){
+    if(c!=='alle'&&BEARBEITBAR){
       if(bearbeiten){
         const u=document.createElement('button');u.className='mini';u.textContent='✎';u.title='Umbenennen';
         u.onclick=e=>{e.stopPropagation();umbenennen(c);};
@@ -378,32 +397,143 @@ function ablegeZiel(el,kat){
     senden([...e.dataTransfer.files],typeof kat==='function'?kat():kat);});
 }
 let laeuft=false;
+// Online rechnet die Verarbeitung auf GitHub: die kann kein HEIC (bliebe für immer liegen),
+// dafür MKV. Auf dem Mac rechnet der Rechner selbst — dort bleibt es wie gehabt.
+const VIDEOTYP=NURLESEN?/\.(mp4|mov|webm|m4v|mkv)$/i:/\.(mp4|mov|webm|m4v)$/i;
+const BILDTYP =NURLESEN?/\.(jpe?g|png|webp)$/i:/\.(jpe?g|png|heic|webp)$/i;
+const MAXMB=95;                       // darüber nimmt der Board-Dienst nichts mehr an
+const mb1=b=>(b/1048576).toFixed(1);
+
+// Vor dem Hochladen nachfragen, ob das Passwort überhaupt noch gilt. Sonst lädt jemand
+// vier Minuten und bekommt erst danach die Absage.
+async function passwortGiltNoch(){
+  try{
+    const a=await fetch(DIENST+'/anmelden',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({passwort:passwort()})});
+    if(a.ok)return {ok:true};
+    if(a.status===429)return {ok:false,fehler:'Zu viele Versuche. Bitte eine Minute warten.'};
+    try{localStorage.removeItem(pwSchluessel);}catch(e){}
+    return {ok:false,fehler:'Deine Anmeldung gilt nicht mehr.\nBitte die Seite neu laden und dich noch einmal anmelden.'};
+  }catch(e){ return {ok:false,fehler:'Keine Verbindung zum Board-Dienst.'}; }
+}
+
+// XMLHttpRequest statt fetch — nur damit gibt es einen Fortschritt zu sehen. Ohne Balken
+// hält jeder normale Mensch die Seite für eingefroren und lädt neu, und bricht damit ab.
+function onlineHochladen(datei,kat,fortschritt){
+  return new Promise(fertig=>{
+    const x=new XMLHttpRequest();
+    x.open('POST',DIENST+'/hochladen?name='+encodeURIComponent(datei.name)
+      +'&kat='+encodeURIComponent(kat||''));
+    // Kodiert, weil HTTP-Kopfzeilen nur Latin-1 tragen: ein Passwort mit Umlaut
+    // oder Emoji lässt setRequestHeader() sonst mit einem Fehler abbrechen.
+    x.setRequestHeader('X-Board-Passwort',encodeURIComponent(passwort()));
+    x.setRequestHeader('Content-Type','application/octet-stream');
+    x.upload.onprogress=e=>{if(e.lengthComputable)fortschritt(e.loaded,e.total);};
+    x.onload=()=>{
+      if(x.status===401){
+        try{localStorage.removeItem(pwSchluessel);}catch(e){}
+        return fertig({ok:false,fehler:'Deine Anmeldung gilt nicht mehr.\nBitte die Seite neu laden und dich noch einmal anmelden.'});
+      }
+      let j={}; try{j=JSON.parse(x.responseText);}catch(e){}
+      fertig(j.ok?{ok:true,datei:j.datei}:{ok:false,fehler:j.fehler||('Der Board-Dienst hat abgelehnt ('+x.status+').')});
+    };
+    x.onerror=()=>fertig({ok:false,fehler:'Die Verbindung ist abgerissen.\nBei wackeligem Handy-Empfang bitte im WLAN noch einmal versuchen.'});
+    x.send(datei);
+  });
+}
+
 async function senden(dateien,kat){
   if(laeuft)return alert('Es lädt gerade schon etwas hoch — kurz warten.');
-  const videos=dateien.filter(f=>/\.(mp4|mov|webm|m4v)$/i.test(f.name));
-  const bilder=dateien.filter(f=>/\.(jpe?g|png|heic|webp)$/i.test(f.name));
+  const videos=dateien.filter(f=>VIDEOTYP.test(f.name));
+  const bilder=dateien.filter(f=>BILDTYP.test(f.name));
   if(!videos.length&&!bilder.length)
-    return alert('Bitte Videos (mp4, mov, webm, m4v) oder Bilder (jpg, png, heic, webp).');
+    return alert(NURLESEN
+      ? 'Bitte Videos (mp4, mov, webm, m4v, mkv) oder Bilder (jpg, png, webp).\n\nHEIC vom iPhone geht hier nicht — in der Fotos-App bitte vorher als JPG sichern.'
+      : 'Bitte Videos (mp4, mov, webm, m4v) oder Bilder (jpg, png, heic, webp).');
+  const alle=videos.concat(bilder);
+  if(NURLESEN){
+    // Zu Großes gar nicht erst losschicken: sonst lädt jemand minutenlang ins Leere.
+    const zuGross=alle.filter(f=>f.size>MAXMB*1048576);
+    if(zuGross.length)
+      return alert('Das ist zu groß zum Hochladen:\n\n'
+        +zuGross.map(f=>f.name+' — '+mb1(f.size)+' MB').join('\n')
+        +'\n\nMehr als '+MAXMB+' MB nimmt das Board nicht an.\nBitte das Video auf dem Handy kürzen (Fotos-App → Bearbeiten) und noch einmal versuchen.');
+  }
   let slot='';
-  if(bilder.length){
+  if(bilder.length&&!NURLESEN){   // die Sammelkarte baut nur der Mac; online wird jedes Bild eine eigene Karte
     const vorschlag=bilder[0].name.replace(/\.[^.]+$/,'');
     slot=bilder.length>1
       ? (prompt(bilder.length+' Bilder werden eine Karte zum Durchswipen.\nWie soll sie heißen?',vorschlag)||'').trim()
       : vorschlag;
     if(!slot)return;
   }
-  const up=document.getElementById('up'),alt=up.innerHTML;laeuft=true;
-  await sichern(true);
-  const alle=videos.concat(bilder);
+  const up=document.getElementById('up');laeuft=true;
+  if(NURLESEN){
+    // sichern() schreibt online nichts weg — offene Notizen müssen hier über GitHub raus,
+    // sonst sind sie weg, sobald der Neubau die Seite ersetzt.
+    if(offeneAenderungen){
+      up.innerHTML='<b>Deine offenen Notizen werden gesichert …</b>';
+      const s=await ghSpeichern();
+      if(!s.ok){alert('Deine Notizen ließen sich nicht sichern:\n\n'+s.fehler+'\n\nEs wurde noch nichts hochgeladen.');ablageText();laeuft=false;return;}
+      offeneAenderungen=false;
+      const k=document.getElementById('speichern');
+      if(k){k.textContent='✓ Gespeichert';k.classList.add('ghost');}
+    }
+    up.innerHTML='<b>Anmeldung wird geprüft …</b>';
+    const p=await passwortGiltNoch();
+    if(!p.ok){alert(p.fehler);ablageText();laeuft=false;return;}
+  }else await sichern(true);
+  let themenGesetzt=false;
   for(let i=0;i<alle.length;i++){
-    const istBild=bilder.includes(alle[i]);
-    up.innerHTML='<b>Lädt hoch … '+(i+1)+' von '+alle.length+'</b>'+alle[i].name+(kat?' → '+kat:'');
-    try{
-      const j=await(await fetch('/upload?name='+encodeURIComponent(alle[i].name)
-        +'&kat='+encodeURIComponent(kat||'')+'&slot='+encodeURIComponent(istBild?slot:''),
-        {method:'POST',body:alle[i]})).json();
-      if(!j.ok){alert('Ging nicht: '+j.fehler);up.innerHTML=alt;laeuft=false;return;}
-    }catch(e){alert('Server nicht erreichbar — läuft BOARD_STARTEN.command noch?');up.innerHTML=alt;laeuft=false;return;}
+    const kopf='<b>Lädt hoch … '+(i+1)+' von '+alle.length+'</b>'+esc(alle[i].name)+(kat?' → '+esc(kat):'');
+    if(NURLESEN){
+      up.innerHTML=kopf+'<div class="bal"><i></i></div><div class="baltext">0 von '+mb1(alle[i].size)+' MB</div>';
+      const balken=up.querySelector('.bal i'),text=up.querySelector('.baltext');
+      const j=await onlineHochladen(alle[i],kat,(schon,ganz)=>{
+        balken.style.width=Math.round(schon/ganz*100)+'%';
+        text.textContent=mb1(schon)+' von '+mb1(ganz)+' MB';
+      });
+      if(!j.ok){alert('Ging nicht:\n\n'+j.fehler);ablageText();laeuft=false;return;}
+      // Das gewählte Thema reist nicht mit der Datei — der Dienst gibt nur den endgültigen
+      // Namen zurück. Also tragen wir es hier schon unter genau der Kennung ein, die die
+      // Verarbeitung gleich vergeben wird. Sobald die Karte entsteht, hängt das Thema dran.
+      // Die Regeln stammen aus eingang_verarbeiten.py: Videos werden immer zu .mp4,
+      // Bilder bekommen einen Slot ohne Endung.
+      if(kat&&j.datei){
+        const ohne=j.datei.replace(/\.[^.]+$/,'');
+        const id=bilder.includes(alle[i])
+          ? 'INSPO_INBOX/bilder/'+ohne
+          : 'INSPO_INBOX/videos/'+ohne+'.mp4';
+        EINTRAEGE[id]=Object.assign({},EINTRAEGE[id]||{},{kategorien:[kat]});
+        themenGesetzt=true;
+      }
+    }else{
+      const istBild=bilder.includes(alle[i]);
+      up.innerHTML=kopf;
+      try{
+        const j=await(await fetch('/upload?name='+encodeURIComponent(alle[i].name)
+          +'&kat='+encodeURIComponent(kat||'')+'&slot='+encodeURIComponent(istBild?slot:''),
+          {method:'POST',body:alle[i]})).json();
+        if(!j.ok){alert('Ging nicht: '+j.fehler);ablageText();laeuft=false;return;}
+      }catch(e){alert('Server nicht erreichbar — läuft BOARD_STARTEN.command noch?');ablageText();laeuft=false;return;}
+    }
+  }
+  if(NURLESEN){
+    // Die vorgemerkten Themen jetzt wegschreiben. Scheitert das, ist das Video trotzdem
+    // angekommen — es landet dann nur unter „Sonstiges“ statt im gewählten Thema.
+    if(themenGesetzt){
+      up.innerHTML='<b>Thema wird vermerkt …</b>';
+      const t=await ghSpeichern();
+      if(!t.ok)alert('Das Video ist angekommen, aber das Thema ließ sich nicht vermerken:\n\n'
+        +t.fehler+'\n\nEs erscheint dann unter „Sonstiges“ und kann dort umsortiert werden.');
+    }
+    // Kein Neuladen: der Weg über GitHub dauert 3–5 Minuten. Ein sofortiges Neuladen zeigte
+    // nur das alte Board und sähe nach Fehler aus.
+    up.innerHTML='<b>Angekommen.</b>'
+      +(alle.length>1?'Deine '+alle.length+' Dateien sind':'Dein Video ist')+' in etwa 3 Minuten fertig. '
+      +'Diese Seite merkt das nicht von allein — warte kurz und drücke dann hier:'
+      +'<div><button class="btn" style="margin-top:9px" onclick="event.stopPropagation();location.reload()">Video ist online — Seite jetzt neu laden</button></div>';
+    laeuft=false;return;
   }
   up.innerHTML='<b>Fertig — Board wird neu geladen …</b>';
   location.reload();
@@ -411,8 +541,10 @@ async function senden(dateien,kat){
 function ablageText(){
   const up=document.getElementById('up');
   up.innerHTML=cf==='alle'
-    ? '<b>Videos oder Bilder hierher ziehen</b>mehrere Bilder zusammen werden eine Karte zum Durchswipen'
-    : '<b>Videos oder Bilder hierher ziehen</b>landen direkt im Thema „'+cf+'"';
+    ? '<b>Videos oder Bilder hierher ziehen</b>'+(NURLESEN
+        ? 'oder tippen zum Auswählen — nach etwa 3 Minuten sieht das Team sie'
+        : 'mehrere Bilder zusammen werden eine Karte zum Durchswipen')
+    : '<b>Videos oder Bilder hierher ziehen</b>landen direkt im Thema „'+esc(cf)+'"';
 }
 
 document.querySelectorAll('.of').forEach(c=>c.onclick=()=>{document.querySelectorAll('.of').forEach(x=>x.classList.remove('on'));c.classList.add('on');of=c.dataset.o;render();});
@@ -476,7 +608,8 @@ if(NURLESEN){   // veröffentlichte Fassung: Ausgeblendetes ist gar nicht erst e
     sp.onclick=jetztSpeichern;
     leiste.appendChild(sp);
     document.querySelector('.help').innerHTML='✏️ <b>Bearbeitungsmodus.</b> Themen, Status und '
-      +'Notizen ändern, dann auf <b>Speichern</b> — dein Team sieht es etwa eine Minute später.';
+      +'Notizen ändern, dann auf <b>Speichern</b> — dein Team sieht es etwa eine Minute später.'
+      +'<br>🎬 Videos und Bilder oben ins Feld ziehen oder antippen. Die sind nach etwa 3 Minuten für alle da.';
     window.addEventListener('beforeunload',e=>{ if(offeneAenderungen){e.preventDefault();e.returnValue='';} });
   }else{
     document.querySelector('.help').innerHTML='👀 <b>Nur zum Ansehen.</b> Filtern und Videos '
@@ -491,7 +624,7 @@ const b=new Blob([JSON.stringify(o,null,2)],{type:'application/json'});
 const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='caliante_notizen.json';a.click();
 alert('caliante_notizen.json gespeichert.');}
 
-if(LIVE){
+if(BEARBEITBAR){
   const up=document.getElementById('up'),fi=document.getElementById('fi');
   up.style.display='block';
   up.onclick=()=>fi.click();
@@ -499,6 +632,8 @@ if(LIVE){
   ablegeZiel(up,()=>cf==='alle'?'':cf);                       // Ziel erst beim Ablegen bestimmen
   window.addEventListener('dragover',e=>e.preventDefault());  // sonst öffnet der Browser das Video
   window.addEventListener('drop',e=>e.preventDefault());
+}
+if(LIVE){
   // Einmalig: was früher nur im Browser lag, in die Datei übernehmen.
   if(!localStorage.getItem('cl_uebernommen')){
     let n=0;

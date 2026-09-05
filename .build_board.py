@@ -1,8 +1,30 @@
 #!/usr/bin/env python3
-import json, os, urllib.parse, datetime, hashlib, base64, sys, subprocess, shutil
+import json, os, re, urllib.parse, datetime, hashlib, base64, sys, subprocess, shutil
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 THUMBS = os.path.join(BASE, ".thumbs")
+
+
+def js(x):
+    """JSON so einbetten, dass es den <script>-Block nicht sprengen kann.
+
+    json.dumps laesst < > & unangetastet. Eine Notiz mit dem Text </script> wuerde
+    das Skript-Element beenden — alles danach waere wieder HTML und koennte fremden
+    Code auf die Seite bringen. Die Zeichen stehen in JSON immer innerhalb von
+    Zeichenketten, deshalb ist die \\uXXXX-Schreibweise hier gefahrlos.
+    U+2028/2029 sind in JSON erlaubt, in JavaScript-Zeichenketten aber Zeilenumbrueche.
+    Gleiche Funktion in render_web.py — beide muessen zusammenpassen.
+    """
+    return (json.dumps(x, ensure_ascii=False)
+            .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+
+
+def h(s):
+    """Text, der in ein HTML-Attribut oder zwischen Tags geht."""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&#39;"))
+
 # Per Doppelklick gestartet kennt der Finder /opt/homebrew/bin nicht — Pfad selbst suchen.
 FFMPEG = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
 SIPS = "/usr/bin/sips"          # Bilder, kann auch HEIC vom iPhone
@@ -16,6 +38,11 @@ NUR_INBOX = True
 STANDARD_CATS = ["Unboxing","UGC / Zuhause","Lifestyle-Shooting","Street","Outfitcheck","Spiegel-Slideshow","Produkt / Ästhetik","Sonstiges"]
 # Themen, Notizen, Status und Ausgeblendetes liegen hier — überlebt Browserwechsel und Neubauten.
 DATEN = os.path.join(BASE, "BOARD_DATEN.json")
+# Alle Platzhalter, die .board_template.html enthalten darf. render_web.py führt dieselbe Liste.
+# Wer die Vorlage um einen erweitert, muss ihn in beiden Skripten ergänzen — sonst stünde er
+# hinterher wörtlich auf der Seite. Unbekanntes bricht den Bau ab, statt es durchzulassen.
+PLATZHALTER = {"__DATA__","__CATS__","__ORIGCHIPS__","__N__","__DATE__",
+               "__MOBILE__","__NURLESEN__","__DIENST__","__BAU__"}
 
 def daten_laden():
     d = {}
@@ -192,17 +219,63 @@ def web_kopie(rel, full):
         return ""
     return urllib.parse.quote(os.path.relpath(ziel, BASE).replace(os.sep,'/'))
 
+def team_datei(e):
+    """Wo liegt die verkleinerte Datei dieses Eintrags unter web/? Leer, wenn sie fehlt."""
+    p = e.get("src") or (e.get("bilder") or [{}])[0].get("src","")
+    voll = os.path.join(BASE, urllib.parse.unquote(p)) if p else ""
+    return voll if voll and os.path.exists(voll) else ""
+
+def team_eintraege_retten():
+    """Karten, die jemand über die Team-Seite hochgeladen hat, aus eintraege.json übernehmen.
+
+    Ihre Originale liegen ausschließlich auf GitHub, nie in INSPO_INBOX. Ohne diesen Schritt
+    wirft der Neubau vom Mac aus sie beim nächsten Veröffentlichen stillschweigend aus dem
+    Board — irgendwann später, ohne erkennbaren Zusammenhang zum Hochladen.
+    """
+    pfad = os.path.join(BASE, "eintraege.json")
+    if not os.path.exists(pfad):
+        return []                       # allererster Lauf: es gibt noch nichts zu übernehmen
+    try:
+        vorhanden = json.load(open(pfad, encoding='utf-8'))["eintraege"]
+    except Exception as fehler:
+        # Hier hängen fremde Uploads dran — lieber gar nichts bauen als sie zu verlieren.
+        sys.exit("  ! Die Datei eintraege.json ist beschädigt. Darin stehen die Videos, die dein"
+                 "\n    Team hochgeladen hat. Es wurde nichts verändert und nichts gelöscht."
+                 f"\n    Sag Claude Bescheid. ({fehler})")
+    lokal = {e["id"] for e in entries}
+    gerettet = []
+    for e in vorhanden:
+        if e.get("quelle") != "team" or e["id"] in lokal:
+            continue                    # dieselbe Datei liegt auch hier: die vom Mac hat Vorrang
+        e = anreichern(dict(e))         # Thema, Notiz, Status, Ausgeblendetes wie bei allen anderen
+        datei = team_datei(e)
+        if not datei:
+            print(f"  ! Für {e.get('name','?')} fehlt die verkleinerte Datei unter web/ —"
+                  " die Karte bleibt, spielt aber nichts ab.")
+        # Wann die Datei auf diesem Mac ankam, ist das einzige Datum, das es hier gibt.
+        # Frisch geholte Uploads landen damit oben, genau wie neue Dateien aus der Inbox.
+        e["ts"] = os.path.getmtime(datei) if datei else 0
+        gerettet.append(e)
+    return gerettet
+
+# Nur beim Veröffentlichen gebraucht — die beiden Mac-Fassungen kennen keine Team-Uploads.
+TEAM = team_eintraege_retten() if "--web" in sys.argv else []
+
 origins=["Inbox (neu)","Referenz","Eigenes Material"]
 
 gekappt=0
 def build(mobile, web=False):
     global gekappt
+    # Team-Uploads gehören nur in die Netz-Fassung; auf dem Mac gibt es ihre Originale nicht.
+    liste = sorted(entries+TEAM, key=lambda e: e.get("ts",0), reverse=True) if web else entries
     data=[]
-    for e in entries:
+    for e in liste:
         if web and e.get("aus"): continue   # Ausgeblendetes gehört nicht in die Team-Fassung
         d=dict(e); d.pop("ts",None)
-        if web:
+        if web and e.get("quelle")!="team":
             # Team-Seite: auf die verkleinerten Web-Fassungen zeigen, nicht auf lokale Pfade.
+            # Team-Uploads sind ausgenommen: verkleinert wurden sie schon auf GitHub, ihren
+            # Web-Pfad bringen sie mit — ihr Original gibt es auf diesem Mac gar nicht.
             if e["type"]=="video":
                 d["src"]=web_kopie(e["id"], os.path.join(BASE,e["id"]))
             elif e["type"]=="bilder":
@@ -215,10 +288,15 @@ def build(mobile, web=False):
             d["bilder"]=[{"thumb":b["thumb"]} for b in d["bilder"][:MOBIL_MAX]]
         data.append(d)
     tpl=open(os.path.join(BASE,".board_template.html"),encoding='utf-8').read()
-    out=tpl.replace("__DATA__",json.dumps(data,ensure_ascii=False))
-    out=out.replace("__CATS__",json.dumps(CATS,ensure_ascii=False))
-    out=out.replace("__ORIGCHIPS__","".join(f'<span class="chip of" data-o="{o}">{o}</span>' for o in origins))
-    out=out.replace("__N__",str(sum(1 for e in entries if not e.get("aus"))))
+    unbekannt=sorted(set(re.findall(r"__[A-Z0-9_]+__",tpl))-PLATZHALTER)
+    if unbekannt:
+        sys.exit("  ! In der Vorlage steht etwas Neues: "+", ".join(unbekannt)
+                 +"\n    Dieses Skript kennt es noch nicht, die Seite wurde nicht gebaut."
+                 +"\n    Sag Claude Bescheid.")
+    out=tpl.replace("__DATA__",js(data))
+    out=out.replace("__CATS__",js(CATS))
+    out=out.replace("__ORIGCHIPS__","".join(f'<span class="chip of" data-o="{h(o)}">{h(o)}</span>' for o in origins))
+    out=out.replace("__N__",str(sum(1 for e in liste if not e.get("aus"))))
     out=out.replace("__DATE__",datetime.date.today().strftime("%d.%m.%Y"))
     out=out.replace("__MOBILE__","true" if mobile else "false")
     out=out.replace("__NURLESEN__","true" if web else "false")
@@ -232,7 +310,11 @@ def build(mobile, web=False):
     if web:
         # Die Eintragsliste getrennt ablegen: damit kann GitHub die Seite selbst neu bauen,
         # ohne Zugriff auf INSPO_INBOX auf dem Mac. Grundlage fürs Online-Bearbeiten.
-        json.dump({"eintraege":data,"kategorien":CATS},
+        # Ausgeblendete Team-Karten bleiben in der Datei: sie haben sonst keinen Ort, an dem
+        # sie überleben, und "aus dem Board nehmen" soll umkehrbar bleiben.
+        versteckt=[{k:v for k,v in e.items() if k!="ts"}
+                   for e in liste if e.get("aus") and e.get("quelle")=="team"]
+        json.dump({"eintraege":data+versteckt,"kategorien":CATS},
                   open(os.path.join(BASE,"eintraege.json"),"w",encoding='utf-8'),
                   ensure_ascii=False)
     name="index.html" if web else ("CALIANTE_BOARD_HANDY.html" if mobile else "CALIANTE_VIDEO_BOARD.html")
@@ -255,5 +337,7 @@ print(f"{len(sichtbar)} Einträge, {sum(1 for e in sichtbar if e['thumb'])} mit 
       + f" · {len(CATS)} Themen"
       + (f" · {len(slots)} Bilder-Slots mit {sum(len(e['bilder']) for e in slots)} Bildern" if slots else ""))
 print(f"_Themen/: {themen_n} Verknüpfungen nach Kategorie sortiert")
+if TEAM:
+    print(f"{len(TEAM)} Video(s) vom Team aus dem Netz übernommen — sie bleiben im Board.")
 if gekappt:
     print(f"  Hinweis: In der Handy-Datei fehlen {gekappt} Bilder — je Slot sind dort {MOBIL_MAX} enthalten.")

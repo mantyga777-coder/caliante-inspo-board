@@ -8,10 +8,19 @@ Zutaten (alle im Repository):
 
 Wird von der GitHub-Action bei jeder Datenänderung aufgerufen. Lokal macht das
 weiterhin .build_board.py --web (das kann zusätzlich Videos verkleinern).
+
+Team-Uploads können hier nicht verloren gehen: eintraege.json wird nur gelesen und nie
+neu geschrieben. Zusammenführen muss nur der Mac, weil er die Liste aus INSPO_INBOX
+komplett neu aufbaut — das macht .build_board.py.
 """
-import json, os, datetime, sys
+import json, os, re, datetime, sys
 
 BASE = os.path.dirname(os.path.abspath(__file__))
+# Alle Platzhalter, die .board_template.html enthalten darf — .build_board.py führt dieselbe
+# Liste. Wer die Vorlage erweitert, muss beide ergänzen, sonst stünde der Platzhalter wörtlich
+# auf der Seite. Unbekanntes bricht den Bau ab, statt es durchzulassen.
+PLATZHALTER = {"__DATA__", "__CATS__", "__ORIGCHIPS__", "__N__", "__DATE__",
+               "__MOBILE__", "__NURLESEN__", "__DIENST__", "__BAU__"}
 
 def laden(name):
     with open(os.path.join(BASE, name), encoding='utf-8') as f:
@@ -43,14 +52,38 @@ for e in eintraege:
     sichtbar.append(e)
 
 origins = ["Inbox (neu)", "Referenz", "Eigenes Material"]
+def js(x):
+    """JSON so einbetten, dass es den <script>-Block nicht sprengen kann.
+
+    json.dumps laesst < > & unangetastet. Eine Notiz mit dem Text </script> wuerde
+    das Skript-Element beenden — alles danach waere wieder HTML und koennte fremden
+    Code auf die Seite bringen. Die Zeichen stehen in JSON immer innerhalb von
+    Zeichenketten, deshalb ist die \\uXXXX-Schreibweise hier gefahrlos.
+    U+2028/2029 sind in JSON erlaubt, in JavaScript-Zeichenketten aber Zeilenumbrueche.
+    """
+    return (json.dumps(x, ensure_ascii=False)
+            .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+            .replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"))
+
+
+def h(s):
+    """Text, der in ein HTML-Attribut oder zwischen Tags geht."""
+    return (str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+            .replace('"', "&quot;").replace("'", "&#39;"))
+
+
 bau = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
 with open(os.path.join(BASE, ".board_template.html"), encoding='utf-8') as f:
     out = f.read()
-out = out.replace("__DATA__", json.dumps(sichtbar, ensure_ascii=False))
-out = out.replace("__CATS__", json.dumps(CATS, ensure_ascii=False))
+unbekannt = sorted(set(re.findall(r"__[A-Z0-9_]+__", out)) - PLATZHALTER)
+if unbekannt:
+    sys.exit("In der Vorlage steht etwas Neues: " + ", ".join(unbekannt)
+             + " — render_web.py kennt es noch nicht, die Seite wurde nicht gebaut.")
+out = out.replace("__DATA__", js(sichtbar))
+out = out.replace("__CATS__", js(CATS))
 out = out.replace("__ORIGCHIPS__", "".join(
-    f'<span class="chip of" data-o="{o}">{o}</span>' for o in origins))
+    f'<span class="chip of" data-o="{h(o)}">{h(o)}</span>' for o in origins))
 out = out.replace("__N__", str(len(sichtbar)))
 out = out.replace("__DATE__", datetime.date.today().strftime("%d.%m.%Y"))
 out = out.replace("__MOBILE__", "false")
