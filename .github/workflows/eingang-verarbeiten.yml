@@ -1,0 +1,62 @@
+name: Hochgeladenes verarbeiten
+
+# Laeuft, sobald Dateien im Ordner eingang/ landen — egal ob ueber das Board,
+# ueber die GitHub-Oberflaeche oder per Telegram-Automatik.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'eingang/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# Nie zwei Verarbeitungen gleichzeitig — sonst ueberschreiben sie sich eintraege.json.
+concurrency:
+  group: eingang
+  cancel-in-progress: false
+
+jobs:
+  verarbeiten:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: ffmpeg bereitstellen
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version | head -1
+
+      - name: Dateien verarbeiten
+        run: python3 eingang_verarbeiten.py
+
+      - name: Seite neu bauen
+        run: python3 render_web.py
+
+      - name: Ergebnis prüfen
+        run: |
+          python3 -c "
+          import re, json, sys
+          h = open('index.html', encoding='utf-8').read()
+          d = json.loads(re.search(r'const DATA=(\[.*?\]), CATS=', h, re.S).group(1), strict=False)
+          videos = [v for v in d if v['type'] == 'video']
+          ohne = [v for v in videos if not v.get('src')]
+          if videos and ohne:
+              print(f'{len(ohne)} von {len(videos)} Videos ohne abspielbaren Pfad — Abbruch.')
+              sys.exit(1)
+          print(f'Pruefung ok: {len(d)} Eintraege, {len(videos)} Videos abspielbar.')
+          "
+
+      - name: Veröffentlichen
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "Nichts verarbeitet — nichts zu veroeffentlichen."
+            exit 0
+          fi
+          git config user.name "Board-Automatik"
+          git config user.email "actions@github.com"
+          git add -A
+          git commit -m "Hochgeladenes verarbeitet und Board neu gebaut"
+          git push
