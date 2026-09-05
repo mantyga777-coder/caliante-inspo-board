@@ -31,6 +31,22 @@ def lesbar(n):
     """Der Name, den das Team auf der Karte sieht — ohne den technischen Vorsatz."""
     return VORSATZ.sub('', n)
 
+# Der Dienst schiebt "slot-<Kartenname>-name-" zwischen Vorsatz und Dateinamen, wenn
+# mehrere Bilder zu einer Karte zum Durchswipen gehoeren sollen. Im Kartennamen sind
+# Bindestriche verboten, deshalb trennt "-name-" eindeutig.
+SLOTMUSTER = re.compile(r'^(\d{8}-\d{6}-[A-Za-z0-9]{6}_)slot-([A-Za-z0-9._]+)-name-(.+)$')
+
+def slot_teile(n):
+    """Zerlegt in (Kartenname, Dateiname ohne die Kartenname-Markierung).
+
+    Ohne Markierung kommt ("", n) zurueck — dann wird das Bild wie bisher eine
+    eigene Karte. Der Vorsatz bleibt im zweiten Teil stehen, damit die Bilddateien
+    innerhalb einer Karte eindeutige Namen behalten."""
+    m = SLOTMUSTER.match(n)
+    if not m:
+        return "", n
+    return m.group(2), m.group(1) + m.group(3)
+
 def echte_themen():
     """Die Themen, die es im Board wirklich gibt. Felix legt eigene an und loescht alte —
     die fest verdrahtete Liste in raten() ist deshalb regelmaessig veraltet."""
@@ -116,6 +132,7 @@ def verarbeiten():
     vorhandene_ids = {e["id"] for e in bestand["eintraege"]}
 
     neu = 0
+    offene_karten = {}   # Kennung -> Eintrag, um weitere Bilder derselben Karte anzuhaengen
     for name in dateien:
         quelle = os.path.join(EINGANG, name)
         sicher = saeubern(name)          # ab hier nur noch der gesaeuberte Name in Pfaden
@@ -131,13 +148,19 @@ def verarbeiten():
             continue
 
         if ist_bild:
-            # Bilder werden zu einem eigenen Slot mit einem Bild — wie beim Mac-Upload.
-            # Der Slot traegt den vollen Namen samt Vorsatz, damit zwei gleich benannte
-            # Fotos nicht denselben Slot (und damit dieselbe Notiz) erwischen.
-            slot = os.path.splitext(sicher)[0]
-            anzeige = os.path.splitext(lesbar(sicher))[0] or slot
+            # Gehoeren mehrere Bilder zu einer Karte zum Durchswipen, hat der Dienst den
+            # Kartennamen in den Dateinamen geschrieben — anders kann er nicht mitreisen,
+            # weil jede Datei einzeln hochgeladen wird.
+            kartenname, ohne_slot = slot_teile(sicher)
+            # Ohne Kartennamen wird jedes Bild eine eigene Karte. Der Slot traegt dann den
+            # vollen Namen samt Vorsatz, damit zwei gleich benannte Fotos nicht denselben
+            # Slot (und damit dieselbe Notiz) erwischen.
+            slot = kartenname or os.path.splitext(ohne_slot)[0]
+            anzeige = kartenname or os.path.splitext(lesbar(ohne_slot))[0] or slot
             eintrag_id = f"INSPO_INBOX/bilder/{slot}"
-            web_rel = f"web/INSPO_INBOX/bilder/{slot}/{slot}.jpg"
+            # Jedes Bild braucht innerhalb der Karte einen eigenen Dateinamen. Der Vorsatz
+            # aus Zeitstempel und Zufall macht ihn eindeutig, auch bei gleichem Fotonamen.
+            web_rel = f"web/INSPO_INBOX/bilder/{slot}/{os.path.splitext(ohne_slot)[0]}.jpg"
             ziel = os.path.join(BASE, web_rel)
             os.makedirs(os.path.dirname(ziel), exist_ok=True)
             try:
@@ -152,6 +175,15 @@ def verarbeiten():
                 os.remove(quelle)
                 continue
             thumb = thumb_data(quelle, True)
+            # Zweites, drittes Bild derselben Karte: nur anhaengen, keine neue Karte.
+            if eintrag_id in offene_karten:
+                schon = offene_karten[eintrag_id]
+                schon["bilder"].append({"src": web_rel, "thumb": thumb})
+                schon["mb"] = round(schon["mb"] + os.path.getsize(ziel) / 1048576, 1)
+                os.remove(quelle)
+                neu += 1
+                print(f"  Zur Karte „{anzeige}“ gelegt: Bild {len(schon['bilder'])}")
+                continue
             eintrag = {"type": "bilder", "id": eintrag_id, "name": anzeige, "folder": "Bilder",
                        "src": "", "origin": "Inbox (neu)", "cat": guess(eintrag_id),
                        "cats": [guess(eintrag_id)], "notiz": "", "status": "",
@@ -189,6 +221,8 @@ def verarbeiten():
             bestand["eintraege"] = [e for e in bestand["eintraege"] if e["id"] != eintrag_id]
         bestand["eintraege"].insert(0, eintrag)   # neuestes zuerst, wie im Board
         vorhandene_ids.add(eintrag_id)
+        if eintrag["type"] == "bilder":
+            offene_karten[eintrag_id] = eintrag   # weitere Bilder landen in dieser Karte
         os.remove(quelle)
         neu += 1
         print(f"  Aufgenommen: {anzeige} ({eintrag['mb']} MB nach dem Verkleinern)")

@@ -132,12 +132,23 @@ function githubFehler(status) {
 // Die 120 Zeichen gelten für den fertigen Namen samt Vorsatz, denn genau so landet er im
 // Ordner eingang/ und wird dort erneut auf 120 gekürzt. Gekürzt wird deshalb hier schon der
 // Namensteil und nie die Endung — ohne Endung würde die Datei drüben aussortiert.
-function endgueltigerName(rohName, endung) {
+function endgueltigerName(rohName, endung, slot) {
   const zeit = new Date().toISOString().replace(/[-:]/g, ""); // 20260905T161422.000Z
   const zufall = [...crypto.getRandomValues(new Uint8Array(3))]
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-  const vorsatz = `${zeit.slice(0, 8)}-${zeit.slice(9, 15)}-${zufall}_`;
+  let vorsatz = `${zeit.slice(0, 8)}-${zeit.slice(9, 15)}-${zufall}_`;
+
+  // Mehrere Bilder sollen EINE Karte zum Durchswipen werden. Jede Datei reist aber
+  // einzeln hierher, deshalb wandert der Kartenname in den Dateinamen — er ist der
+  // einzige Kanal, den beide Seiten schon kennen. eingang_verarbeiten.py liest ihn
+  // wieder heraus und legt alle Bilder mit demselben Kartennamen zusammen.
+  // Bindestriche sind im Kartennamen verboten, damit "-name-" eindeutig trennt.
+  if (slot) {
+    const sauber = slot.replace(/[^A-Za-z0-9._]/g, "_").slice(0, 40);
+    if (sauber) vorsatz += `slot-${sauber}-name-`;
+  }
+
   const basis =
     rohName.slice(0, rohName.length - endung.length).replace(/[^A-Za-z0-9._-]/g, "_") || "datei";
   return vorsatz + basis.slice(0, 120 - vorsatz.length - endung.length) + endung;
@@ -212,7 +223,7 @@ async function hochladen(request, env, adresse) {
       400
     );
 
-  const name = endgueltigerName(rohName, endung);
+  const name = endgueltigerName(rohName, endung, (adresse.searchParams.get("slot") || "").trim());
   const kopf = {
     Authorization: "Bearer " + env.GH_TOKEN,
     Accept: "application/vnd.github+json",

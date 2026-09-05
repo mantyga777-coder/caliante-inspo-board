@@ -419,11 +419,12 @@ async function passwortGiltNoch(){
 
 // XMLHttpRequest statt fetch — nur damit gibt es einen Fortschritt zu sehen. Ohne Balken
 // hält jeder normale Mensch die Seite für eingefroren und lädt neu, und bricht damit ab.
-function onlineHochladen(datei,kat,fortschritt){
+function onlineHochladen(datei,kat,slot,fortschritt){
   return new Promise(fertig=>{
     const x=new XMLHttpRequest();
     x.open('POST',DIENST+'/hochladen?name='+encodeURIComponent(datei.name)
-      +'&kat='+encodeURIComponent(kat||''));
+      +'&kat='+encodeURIComponent(kat||'')
+      +'&slot='+encodeURIComponent(slot||''));
     // Kodiert, weil HTTP-Kopfzeilen nur Latin-1 tragen: ein Passwort mit Umlaut
     // oder Emoji lässt setRequestHeader() sonst mit einem Fehler abbrechen.
     x.setRequestHeader('X-Board-Passwort',encodeURIComponent(passwort()));
@@ -460,12 +461,16 @@ async function senden(dateien,kat){
         +'\n\nMehr als '+MAXMB+' MB nimmt das Board nicht an.\nBitte das Video auf dem Handy kürzen (Fotos-App → Bearbeiten) und noch einmal versuchen.');
   }
   let slot='';
-  if(bilder.length&&!NURLESEN){   // die Sammelkarte baut nur der Mac; online wird jedes Bild eine eigene Karte
+  if(bilder.length){
     const vorschlag=bilder[0].name.replace(/\.[^.]+$/,'');
-    slot=bilder.length>1
-      ? (prompt(bilder.length+' Bilder werden eine Karte zum Durchswipen.\nWie soll sie heißen?',vorschlag)||'').trim()
-      : vorschlag;
-    if(!slot)return;
+    if(bilder.length>1){
+      slot=(prompt(bilder.length+' Bilder werden eine Karte zum Durchswipen.\nWie soll sie heißen?',vorschlag)||'').trim();
+      if(!slot)return;
+    }else if(!NURLESEN){
+      // Lokal bekommt auch ein einzelnes Bild seinen Dateinamen als Karte. Online nicht:
+      // dort wäre „IMG_1234“ von zwei Handys dieselbe Karte — samt fremder Notiz.
+      slot=vorschlag;
+    }
   }
   const up=document.getElementById('up');laeuft=true;
   if(NURLESEN){
@@ -489,7 +494,7 @@ async function senden(dateien,kat){
     if(NURLESEN){
       up.innerHTML=kopf+'<div class="bal"><i></i></div><div class="baltext">0 von '+mb1(alle[i].size)+' MB</div>';
       const balken=up.querySelector('.bal i'),text=up.querySelector('.baltext');
-      const j=await onlineHochladen(alle[i],kat,(schon,ganz)=>{
+      const j=await onlineHochladen(alle[i],kat,bilder.includes(alle[i])?slot:'',(schon,ganz)=>{
         balken.style.width=Math.round(schon/ganz*100)+'%';
         text.textContent=mb1(schon)+' von '+mb1(ganz)+' MB';
       });
@@ -501,8 +506,12 @@ async function senden(dateien,kat){
       // Bilder bekommen einen Slot ohne Endung.
       if(kat&&j.datei){
         const ohne=j.datei.replace(/\.[^.]+$/,'');
-        const id=bilder.includes(alle[i])
-          ? 'INSPO_INBOX/bilder/'+ohne
+        const istBild=bilder.includes(alle[i]);
+        // Bei mehreren Bildern ist die Kennung der Kartenname — genau so, wie der Dienst
+        // ihn säubert (nur A-Z a-z 0-9 . _ , höchstens 40 Zeichen).
+        const kartenId=slot?slot.replace(/[^A-Za-z0-9._]/g,'_').slice(0,40):'';
+        const id=istBild
+          ? 'INSPO_INBOX/bilder/'+(kartenId||ohne)
           : 'INSPO_INBOX/videos/'+ohne+'.mp4';
         EINTRAEGE[id]=Object.assign({},EINTRAEGE[id]||{},{kategorien:[kat]});
         themenGesetzt=true;
