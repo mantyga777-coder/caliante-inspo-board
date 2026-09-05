@@ -55,7 +55,7 @@ out = out.replace("__N__", str(len(sichtbar)))
 out = out.replace("__DATE__", datetime.date.today().strftime("%d.%m.%Y"))
 out = out.replace("__MOBILE__", "false")
 out = out.replace("__NURLESEN__", "true")
-out = out.replace("__REPO__", "mantyga777-coder/caliante-inspo-board")
+out = out.replace("__DIENST__", "https://caliante-board-dienst.myaffiliate24.workers.dev")
 out = out.replace("__BAU__", bau)
 
 with open(os.path.join(BASE, "index.html"), "w", encoding='utf-8') as f:

@@ -14,6 +14,8 @@ h1{font-family:'Didot','Bodoni 72',Georgia,serif;font-size:26px;letter-spacing:.
 .bar{display:flex;gap:6px;align-items:center;overflow-x:auto;padding:8px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
 .bar::-webkit-scrollbar{display:none}
 .sticky{position:sticky;top:0;background:var(--paper);z-index:9;}
+/* Anmelden/Speichern haben eine eigene Zeile — in der Filterleiste scrollten sie seitlich weg. */
+.anmelde{display:none;gap:8px;align-items:center;padding:8px 0 4px;}
 .chip{border:1px solid var(--taupe);background:#fff;border-radius:999px;padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;flex:none;}
 .chip.on{background:var(--esp);color:#fff;border-color:var(--esp);}
 .chip.hot{background:var(--butter);border-color:var(--esp);color:var(--noir);}
@@ -76,6 +78,7 @@ select{width:100%;border:1px solid #e7ded4;border-radius:6px;padding:5px 6px;fon
 <div class="up" id="up"><b>Videos oder Bilder hierher ziehen</b>oder klicken zum Auswählen</div>
 <input type="file" id="fi" accept="video/*,image/*" multiple hidden>
 <div class="sticky">
+<div class="anmelde" id="anmelde"></div>
 <div class="bar" id="catbar"></div>
 <div class="bar" id="typebar"><span class="chip tf on" data-t="alle">Alle Typen</span><span class="chip tf" data-t="video">🎬 Videos</span><span class="chip tf" data-t="bilder">🖼 Bilder</span><span class="chip tf" data-t="link">🔗 Links</span></div>
 </div>
@@ -102,45 +105,38 @@ if(NURLESEN){
 // Bearbeiten-Knöpfe. Sonst: Bearbeiten nur lokal über BOARD_STARTEN.command.
 const LIVE=!NURLESEN && location.protocol.startsWith('http');
 
-/* ---- Online-Bearbeiten (nur veröffentlichte Fassung, nur mit Zugangsschlüssel) ---- */
-const REPO="__REPO__";
-const tokenSchluessel='cl_gh_token';
-function token(){ try{return localStorage.getItem(tokenSchluessel)||'';}catch(e){return '';} }
-// Bearbeiten ist möglich: lokal immer, online nur mit hinterlegtem Schlüssel.
-const BEARBEITBAR = LIVE || (NURLESEN && !!token());
+/* ---- Online-Bearbeiten (nur veröffentlichte Fassung, nur nach Anmeldung) ---- */
+// Der Board-Dienst kennt den GitHub-Schlüssel; hier liegt nur das Passwort.
+const DIENST="__DIENST__";
+const pwSchluessel='cl_board_pw';
+function passwort(){ try{return localStorage.getItem(pwSchluessel)||'';}catch(e){return '';} }
+// Bearbeiten ist möglich: lokal immer, online nur nach Anmeldung.
+const BEARBEITBAR = LIVE || (NURLESEN && !!passwort());
 let offeneAenderungen=false;
 
 async function ghSpeichern(){
-  const t=token();
-  if(!t) return {ok:false,fehler:'Kein Zugangsschlüssel hinterlegt.'};
-  const url=`https://api.github.com/repos/${REPO}/contents/BOARD_DATEN.json`;
-  const kopf={'Authorization':'Bearer '+t,'Accept':'application/vnd.github+json'};
+  const pw=passwort();
+  if(!pw) return {ok:false,fehler:'Nicht angemeldet.'};
+  // Nur die vier bekannten Felder schicken; leere Einträge bedeuten "löschen".
+  const aenderungen={};
+  for(const [id,werte] of Object.entries(EINTRAEGE)){
+    const sauber={};
+    for(const f of ['kategorien','status','notiz','ausgeblendet'])
+      if(werte[f] && (!Array.isArray(werte[f])||werte[f].length)) sauber[f]=werte[f];
+    aenderungen[id]=sauber;
+  }
   try{
-    // Aktuellen Stand holen — sonst überschreiben wir, was jemand anderes geändert hat.
-    const jetzt=await fetch(url+'?t='+Date.now(),{headers:kopf,cache:'no-store'});
-    if(jetzt.status===401||jetzt.status===403)
-      return {ok:false,fehler:'Zugangsschlüssel ungültig oder ohne Schreibrecht.'};
-    if(!jetzt.ok) return {ok:false,fehler:'GitHub antwortet nicht ('+jetzt.status+').'};
-    const datei=await jetzt.json();
-    const bestand=JSON.parse(decodeURIComponent(escape(atob(datei.content.replace(/\n/g,'')))));
-
-    // Nur die Einträge überschreiben, die hier geändert wurden — Rest unangetastet lassen.
-    const eintraege=bestand.eintraege||{};
-    for(const [id,werte] of Object.entries(EINTRAEGE)){
-      const sauber={};
-      for(const f of ['kategorien','status','notiz','ausgeblendet'])
-        if(werte[f] && (!Array.isArray(werte[f])||werte[f].length)) sauber[f]=werte[f];
-      if(Object.keys(sauber).length) eintraege[id]=sauber; else delete eintraege[id];
+    const a=await fetch(DIENST+'/speichern',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({passwort:pw,kategorien:CATS,aenderungen})});
+    if(a.status===401){
+      try{localStorage.removeItem(pwSchluessel);}catch(e){}
+      return {ok:false,fehler:'Passwort stimmt nicht mehr. Bitte neu anmelden.'};
     }
-    const neu={kategorien:CATS,eintraege};
-    const inhalt=btoa(unescape(encodeURIComponent(JSON.stringify(neu,null,2))));
-    const antwort=await fetch(url,{method:'PUT',headers:{...kopf,'Content-Type':'application/json'},
-      body:JSON.stringify({message:'Board online bearbeitet',content:inhalt,sha:datei.sha})});
-    if(antwort.status===409)
-      return {ok:false,fehler:'Jemand anderes hat gerade gespeichert. Seite neu laden und nochmal versuchen.'};
-    if(!antwort.ok) return {ok:false,fehler:'Speichern abgelehnt ('+antwort.status+').'};
-    return {ok:true};
-  }catch(e){ return {ok:false,fehler:'Keine Verbindung zu GitHub.'}; }
+    const j=await a.json().catch(()=>({}));
+    if(j.ok) return {ok:true};
+    return {ok:false,fehler:j.fehler||('Speichern abgelehnt ('+a.status+').')};
+  }catch(e){ return {ok:false,fehler:'Keine Verbindung zum Board-Dienst.'}; }
 }
 if(MOBILE)document.getElementById('mobnote').style.display='block';
 // Kennzeichnung, damit Arbeits-Board und Online-Fassung nie verwechselt werden.
@@ -444,26 +440,33 @@ async function jetztSpeichern(){
   }
 }
 
-function anmelden(){
-  const vorhanden=!!token();
-  if(vorhanden && !confirm('Du bist angemeldet. Zugang von diesem Gerät entfernen?')) return;
-  if(vorhanden){ try{localStorage.removeItem(tokenSchluessel);}catch(e){} location.reload(); return; }
-  const t=(prompt('GitHub-Zugangsschlüssel einfügen.\n\n'
-    +'Den erzeugst du einmalig unter github.com → Einstellungen → Developer settings →\n'
-    +'Personal access tokens → Fine-grained tokens, mit Schreibrecht für dieses Repository.')||'').trim();
-  if(!t) return;
-  try{localStorage.setItem(tokenSchluessel,t);}catch(e){alert('Konnte nicht speichern.');return;}
+async function anmelden(){
+  if(passwort()){
+    if(!confirm('Du bist angemeldet. Von diesem Gerät abmelden?')) return;
+    try{localStorage.removeItem(pwSchluessel);}catch(e){}
+    location.reload(); return;
+  }
+  const p=(prompt('Board-Passwort eingeben:')||'').trim();
+  if(!p) return;
+  try{
+    const a=await fetch(DIENST+'/anmelden',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({passwort:p})});
+    if(a.status===429){ alert('Zu viele Versuche. Bitte eine Minute warten.'); return; }
+    if(!a.ok){ alert('Passwort stimmt nicht.'); return; }
+  }catch(e){ alert('Keine Verbindung zum Board-Dienst.'); return; }
+  try{localStorage.setItem(pwSchluessel,p);}catch(e){alert('Konnte nicht speichern.');return;}
   location.reload();
 }
 
 if(NURLESEN){   // veröffentlichte Fassung: Ausgeblendetes ist gar nicht erst enthalten
   document.getElementById('ausbtn').style.display='none';
   document.getElementById('mobnote').style.display='none';
-  const leiste=document.getElementById('ausbtn').parentNode;
+  const leiste=document.getElementById('anmelde');
+  leiste.style.display='flex';
 
   const an=document.createElement('button');
-  an.className='btn ghost';
-  an.textContent=token()?'Abmelden':'Anmelden zum Bearbeiten';
+  an.className=passwort()?'btn ghost':'btn';
+  an.textContent=passwort()?'Abmelden':'🔑 Anmelden zum Bearbeiten';
   an.onclick=anmelden;
   leiste.appendChild(an);
 

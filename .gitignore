@@ -12,3 +12,6 @@
 
 # Die Mac-Fassung zeigt auf lokale Videopfade und funktioniert nur auf diesem Rechner.
 CALIANTE_VIDEO_BOARD.html
+
+# Cloudflare-Zwischenspeicher, gehoert nicht ins Repository
+board-dienst/.wrangler/

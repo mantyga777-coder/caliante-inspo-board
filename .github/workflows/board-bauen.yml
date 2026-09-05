@@ -61,6 +61,10 @@ jobs:
           if 'NURLESEN=true' not in h:
               print('Nur-Lesen-Modus fehlt — Abbruch.')
               sys.exit(1)
+          offen = set(re.findall(r'__[A-Z]+__', h))
+          if offen:
+              print(f'Nicht ersetzte Platzhalter: {offen} — Abbruch.')
+              sys.exit(1)
           print(f'Pruefung ok: {len(d)} Eintraege, {len(videos)} Videos abspielbar.')
           "
 
