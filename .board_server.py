@@ -168,6 +168,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.antwort({"ok": True})
 
     def do_GET(self):
+        # Wer lokal die bare Adresse aufruft, soll das Arbeits-Board sehen, nicht die
+        # Nur-Lesen-Team-Fassung (index.html). Frueher landete Felix hier versehentlich
+        # ohne Upload-Feld. Auf GitHub Pages bleibt index.html am Root — nur hier umleiten.
+        if urllib.parse.urlparse(self.path).path in ("/", "/index.html"):
+            self.send_response(302)
+            self.send_header("Location", "/CALIANTE_VIDEO_BOARD.html")
+            self.end_headers()
+            return
         # Safari verlangt Teilabrufe, sonst springt das Video nicht.
         bereich = self.headers.get("Range")
         pfad = self.translate_path(self.path)
