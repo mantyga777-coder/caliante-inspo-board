@@ -167,6 +167,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         rebuild()
         self.antwort({"ok": True})
 
+    def end_headers(self):
+        # HTML nie zwischenspeichern: sonst zeigt der Browser nach einem Neubau noch die
+        # alte Fassung, und Aenderungen wirken kaputt. Videos/Bilder duerfen im Cache bleiben.
+        if self.path.split("?")[0].endswith((".html", "/")):
+            self.send_header("Cache-Control", "no-store")
+        super().end_headers()
+
     def do_GET(self):
         # Wer lokal die bare Adresse aufruft, soll das Arbeits-Board sehen, nicht die
         # Nur-Lesen-Team-Fassung (index.html). Frueher landete Felix hier versehentlich
