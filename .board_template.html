@@ -127,6 +127,16 @@ select{width:100%;border:1px solid #e7ded4;border-radius:6px;padding:5px 6px;fon
 .pill:disabled{opacity:.75;}
 .rund:focus-visible,.dd:focus-visible,.wahl:focus-visible,.mknopf:focus-visible,.fab:focus-visible,.pill:focus-visible{outline:2px solid var(--esp);outline-offset:2px;}
 @media(prefers-reduced-motion:reduce){.menu,.sheet,.schleier,.pill{transition:none;}}
+/* Eigener Dialog statt prompt()/confirm(): Browser koennen die eingebauten Dialoge
+   abschalten ("keine weiteren Dialoge zulassen"), dann liefen Anlegen und Umbenennen
+   ins Leere. Dieser hier laesst sich nicht abschalten und tippt sich am Handy besser. */
+.dlg-schleier{position:fixed;inset:0;background:rgba(22,18,15,.45);z-index:30;display:none;align-items:center;justify-content:center;padding:20px;}
+.dlg-schleier.an{display:flex;}
+.dlg-box{background:var(--paper);border-radius:14px;padding:18px;width:min(360px,92vw);box-shadow:0 12px 40px rgba(22,18,15,.3);display:flex;flex-direction:column;gap:13px;}
+.dlg-text{font-size:14px;color:var(--noir);line-height:1.5;white-space:pre-wrap;}
+.dlg-box input{border:1px solid var(--taupe);border-radius:999px;padding:10px 14px;font-size:16px;background:#fff;font-family:inherit;width:100%;}
+.dlg-knoepfe{display:flex;gap:8px;justify-content:flex-end;}
+.dlg-box .btn:focus-visible,.dlg-box input:focus-visible{outline:2px solid var(--esp);outline-offset:2px;}
 </style></head><body>
 <header class="kopf">
   <div class="marke"><span class="wort">CALIANTÉ</span><span class="wo" id="wo"></span></div>
@@ -368,9 +378,35 @@ function swipeAn(karte,v){
   },{passive:true});
 }
 
+// Eigener Dialog statt prompt()/confirm(). Gibt bei Eingabe den getrimmten Text zurueck
+// (oder null bei Abbruch/leer), bei Bestaetigung true/false. Kann kein Browser abschalten.
+function dialog(opt){
+  return new Promise(fertig=>{
+    const s=document.createElement('div');s.className='dlg-schleier an';
+    const box=document.createElement('div');box.className='dlg-box';
+    const t=document.createElement('div');t.className='dlg-text';t.textContent=opt.text;box.appendChild(t);
+    let inp=null;
+    if(opt.input){inp=document.createElement('input');inp.type='text';inp.value=opt.vorgabe||'';box.appendChild(inp);}
+    const kn=document.createElement('div');kn.className='dlg-knoepfe';
+    const ab=document.createElement('button');ab.type='button';ab.className='btn ghost';ab.textContent='Abbrechen';
+    const ok=document.createElement('button');ok.type='button';ok.className='btn';ok.textContent=opt.okText||'OK';
+    kn.append(ab,ok);box.appendChild(kn);s.appendChild(box);document.body.appendChild(s);
+    if(inp){inp.focus();inp.select();}else ok.focus();
+    function zu(wert){s.remove();document.removeEventListener('keydown',taste);fertig(wert);}
+    const nein=()=>opt.input?null:false;
+    function taste(e){if(e.key==='Escape')zu(nein());else if(e.key==='Enter'){e.preventDefault();ok.click();}}
+    ab.onclick=()=>zu(nein());
+    ok.onclick=()=>zu(opt.input?(inp.value.trim()||null):true);
+    s.addEventListener('click',e=>{if(e.target===s)zu(nein());});
+    document.addEventListener('keydown',taste);
+  });
+}
+function frage(text,vorgabe){return dialog({text:text,input:true,vorgabe:vorgabe});}
+function bestaetige(text){return dialog({text:text,input:false});}
+
 async function entfernen(v,knopf){
   if(NURLESEN){   // online kann niemand Dateien verschieben — die Karte wird nur ausgeblendet
-    if(!confirm(v.name+'\n\nAus dem Board nehmen?\nDie Karte verschwindet für alle, sobald du auf Speichern drückst.\nDie Datei selbst bleibt erhalten; zurückholen geht danach nur am Mac-Board.'))return;
+    if(!await bestaetige(v.name+'\n\nAus dem Board nehmen?\nDie Karte verschwindet für alle, sobald du auf Speichern drückst.\nDie Datei selbst bleibt erhalten; zurückholen geht danach nur am Mac-Board.'))return;
     const e=EINTRAEGE[v.id]||(EINTRAEGE[v.id]={kategorien:v.cats});
     e.ausgeblendet=true;
     aenderungGemerkt();render();return;
@@ -379,7 +415,7 @@ async function entfernen(v,knopf){
   const text=eigen
     ? v.name+'\n\nAus dem Board nehmen?\nDie Datei wandert in den Ordner _papierkorb.'
     : v.name+'\n\nAus dem Board nehmen?\nDie Datei bleibt unangetastet in ihrem Ordner liegen.';
-  if(!confirm(text))return;
+  if(!await bestaetige(text))return;
   knopf.disabled=true;knopf.textContent='einen Moment …';
   await sichern(true);                       // offene Notizen erst sichern, sonst überschreibt der Neubau sie
   const j=await(await fetch('/entfernen?id='+encodeURIComponent(v.id),{method:'POST'})).json();
@@ -424,7 +460,7 @@ function bauChips(){
   aktualisiereDropdowns();bauMenu();   // Auswahlknöpfe und Menü zeigen denselben Stand
 }
 async function themaNeu(){
-  const n=(prompt('Wie soll das neue Thema heißen?')||'').trim();
+  const n=(await frage('Wie soll das neue Thema heißen?')||'').trim();
   if(!n)return;
   if(CATS.includes(n))return alert('Dieses Thema gibt es schon.');
   CATS.push(n);
@@ -432,7 +468,7 @@ async function themaNeu(){
   bauChips();render();
 }
 async function umbenennen(alt){
-  const neu=(prompt('Neuer Name für „'+alt+'"',alt)||'').trim();
+  const neu=(await frage('Neuer Name für „'+alt+'"',alt)||'').trim();
   if(!neu||neu===alt)return;
   if(CATS.includes(neu))return alert('Dieses Thema gibt es schon.');
   CATS[CATS.indexOf(alt)]=neu;
@@ -447,7 +483,7 @@ async function themaLoeschen(name){
   if(CATS.length<2)return alert('Mindestens ein Thema muss übrig bleiben.');
   const auffang=(CATS.includes('Sonstiges')&&name!=='Sonstiges')?'Sonstiges':CATS.find(c=>c!==name);
   const betroffen=DATA.filter(v=>holeKategorien(v).includes(name)).length;
-  if(!confirm('Thema „'+name+'" löschen?\n\n'+betroffen+' Einträge wandern nach „'+auffang+'".\nEs wird keine Datei gelöscht.'))return;
+  if(!await bestaetige('Thema „'+name+'" löschen?\n\n'+betroffen+' Einträge wandern nach „'+auffang+'".\nEs wird keine Datei gelöscht.'))return;
   CATS.splice(CATS.indexOf(name),1);
   DATA.forEach(v=>{const kats=holeKategorien(v);
     if(kats.includes(name)){
@@ -534,7 +570,7 @@ async function senden(dateien,kat){
   if(bilder.length){
     const vorschlag=bilder[0].name.replace(/\.[^.]+$/,'');
     if(bilder.length>1){
-      slot=(prompt(bilder.length+' Bilder werden eine Karte zum Durchswipen.\nWie soll sie heißen?',vorschlag)||'').trim();
+      slot=(await frage(bilder.length+' Bilder werden eine Karte zum Durchswipen.\nWie soll sie heißen?',vorschlag)||'').trim();
       if(!slot)return;
     }else if(!NURLESEN){
       // Lokal bekommt auch ein einzelnes Bild seinen Dateinamen als Karte. Online nicht:
@@ -661,8 +697,8 @@ async function anmeldenMit(p){
   try{localStorage.setItem(pwSchluessel,p);}catch(e){return {ok:false,fehler:'Konnte das Passwort auf diesem Gerät nicht merken.'};}
   return {ok:true};
 }
-function abmelden(){
-  if(!confirm('Von diesem Gerät abmelden?')) return;
+async function abmelden(){
+  if(!await bestaetige('Von diesem Gerät abmelden?')) return;
   try{localStorage.removeItem(pwSchluessel);}catch(e){}
   location.reload();
 }
